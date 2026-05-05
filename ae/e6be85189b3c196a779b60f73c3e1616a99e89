@@ -1,0 +1,14 @@
+docs/architecture/system-overview.md
+  h_17988937eb84f9 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "aee6be85189b3c196a779b60f73c3e1616a99e89",
+  "prompts": {},
+  "humans": {
+    "h_17988937eb84f9": {
+      "author": "Precious Okolaa"
+    }
+  }
+}
