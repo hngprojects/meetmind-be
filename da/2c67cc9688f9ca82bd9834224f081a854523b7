@@ -1,0 +1,52 @@
+alembic/versions/cacd5554ba5a_create_all_tables.py
+  757572b299af8e24 1-528
+app/models/workspace.py
+  h_17988937eb84f9 1-56
+app/models/interview.py
+  h_17988937eb84f9 1-136
+pyproject.toml
+  h_17988937eb84f9 25
+app/models/user.py
+  h_17988937eb84f9 1-125
+app/models/ask_mind.py
+  h_17988937eb84f9 1-45
+app/models/scorecard.py
+  h_17988937eb84f9 1-66
+app/models/integration.py
+  h_17988937eb84f9 1-91
+app/models/meeting.py
+  h_17988937eb84f9 1-59
+app/models/transcript.py
+  h_17988937eb84f9 1-91
+app/models/base.py
+  h_17988937eb84f9 1-4,6-8,10-26,31-51
+app/models/__init__.py
+  h_17988937eb84f9 1-47,50-102
+tests/test_models.py
+  h_17988937eb84f9 1-165
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "da2c67cc9688f9ca82bd9834224f081a854523b7",
+  "prompts": {
+    "757572b299af8e24": {
+      "agent_id": {
+        "tool": "github-copilot",
+        "id": "3fdf6335-6c12-45e7-9ec8-e4770cd81b7a",
+        "model": "copilot/claude-opus-4.6"
+      },
+      "human_author": "Precious Okolaa",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 528,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_17988937eb84f9": {
+      "author": "Precious Okolaa"
+    }
+  }
+}
