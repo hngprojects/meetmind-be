@@ -1,0 +1,20 @@
+.github/pull_request_template.md
+  h_17988937eb84f9 1-89
+.env.example
+  h_17988937eb84f9 1
+CONTRIBUTING.md
+  h_17988937eb84f9 1-278
+docs/architecture/system-overview.md
+  h_17988937eb84f9 1-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "79e55607acca58fb60d42331bb6c90212e82deed",
+  "prompts": {},
+  "humans": {
+    "h_17988937eb84f9": {
+      "author": "Precious Okolaa"
+    }
+  }
+}
