@@ -1,0 +1,41 @@
+app/models/scorecard.py
+  7523f8c9c8505680 3,7,10,20,28,44,54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "b29127a848027d29475b592a9c58c2813b81e4b2",
+  "prompts": {
+    "7523f8c9c8505680": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7688449-95df-4e25-95a0-16caf5cd8015",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Precious Okolaa",
+      "messages": [],
+      "total_additions": 294,
+      "total_deletions": 409,
+      "accepted_lines": 293,
+      "overriden_lines": 0
+    },
+    "b793c3f11454462a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "57abcb61-acb6-40cf-b274-a5d9fdf3214e",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Precious Okolaa",
+      "messages": [],
+      "total_additions": 49,
+      "total_deletions": 113,
+      "accepted_lines": 48,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_17988937eb84f9": {
+      "author": "Precious Okolaa"
+    }
+  }
+}
