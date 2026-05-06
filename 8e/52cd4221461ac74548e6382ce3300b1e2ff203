@@ -1,0 +1,53 @@
+app/models/meeting.py
+  b793c3f11454462a 4,8,11,29,43
+app/models/ask_mind.py
+  b793c3f11454462a 3,7,10,21,31
+app/models/transcript.py
+  b793c3f11454462a 3,6,8,11,21,38,49,60,71
+app/models/workspace.py
+  b793c3f11454462a 8,11,21,39
+app/models/integration.py
+  b793c3f11454462a 4,26,43,54,73
+app/models/interview.py
+  b793c3f11454462a 4,8,11,25,56,65,82,94,104,114
+app/models/user.py
+  b793c3f11454462a 4,24,34,45,56,78,90,104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "8e52cd4221461ac74548e6382ce3300b1e2ff203",
+  "prompts": {
+    "7523f8c9c8505680": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7688449-95df-4e25-95a0-16caf5cd8015",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Precious Okolaa",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "b793c3f11454462a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "57abcb61-acb6-40cf-b274-a5d9fdf3214e",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Precious Okolaa",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 48,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_17988937eb84f9": {
+      "author": "Precious Okolaa"
+    }
+  }
+}
