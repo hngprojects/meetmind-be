@@ -17,6 +17,10 @@ class Settings(BaseSettings):
 
     DATABASE_URL: PostgresDsn
 
+    RESET_TOKEN_EXPIRE_MINUTES: int = 15
+    FRONTEND_URL: str = "http://localhost:3000"
+    RESEND_API_KEY: str
+    TESTING: bool = False
 
 @lru_cache
 def get_settings() -> Settings:
