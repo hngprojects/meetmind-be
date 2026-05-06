@@ -1,0 +1,23 @@
+app/core/responses.py
+  7523f8c9c8505680 1-171,177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "6f655d88e9c7840d5f4e8b0bd2fbfdac24dab3fa",
+  "prompts": {
+    "7523f8c9c8505680": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e7688449-95df-4e25-95a0-16caf5cd8015",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "Precious Okolaa",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 3,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
