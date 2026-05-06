@@ -34,23 +34,23 @@ def _make_user(email: str = "user@example.com") -> MagicMock:
 # ---------------------------------------------------------------------------
 
 class TestForgotPasswordValidation:
-    async def test_rejects_missing_email(self, client: AsyncClient) -> None:
+    async def test_forgot_password_returns_422_when_email_is_missing(self, client: AsyncClient) -> None:
         response = await client.post(ENDPOINT, json={})
         assert response.status_code == 422
 
-    async def test_rejects_empty_email(self, client: AsyncClient) -> None:
+    async def test_forgot_password_returns_422_when_email_is_empty(self, client: AsyncClient) -> None:
         response = await client.post(ENDPOINT, json={"email": ""})
         assert response.status_code == 422
 
-    async def test_rejects_whitespace_only_email(self, client: AsyncClient) -> None:
+    async def test_forgot_password_returns_422_when_email_is_whitespace(self, client: AsyncClient) -> None:
         response = await client.post(ENDPOINT, json={"email": "   "})
         assert response.status_code == 422
 
-    async def test_rejects_invalid_email_format(self, client: AsyncClient) -> None:
+    async def test_forgot_password_returns_422_when_email_format_is_invalid(self, client: AsyncClient) -> None:
         response = await client.post(ENDPOINT, json={"email": "notanemail"})
         assert response.status_code == 422
 
-    async def test_rejects_email_without_tld(self, client: AsyncClient) -> None:
+    async def test_forgot_password_returns_422_when_email_has_no_tld(self, client: AsyncClient) -> None:
         response = await client.post(ENDPOINT, json={"email": "user@domain"})
         assert response.status_code == 422
 
@@ -60,7 +60,7 @@ class TestForgotPasswordValidation:
 # ---------------------------------------------------------------------------
 
 class TestAccountEnumeration:
-    async def test_returns_200_for_registered_email(self, client: AsyncClient) -> None:
+    async def test_forgot_password_returns_200_when_email_is_registered(self, client: AsyncClient) -> None:
         """Registered email: 200 with generic message."""
         with (
             patch(
@@ -85,7 +85,7 @@ class TestAccountEnumeration:
         assert body["status_code"] == 200
         assert "reset link" in body["message"].lower()
 
-    async def test_returns_200_for_unregistered_email(self, client: AsyncClient) -> None:
+    async def test_forgot_password_returns_200_when_email_is_not_registered(self, client: AsyncClient) -> None:
         """Unregistered email: MUST also return 200 with the exact same message."""
         with patch(
             "app.services.auth._get_user_by_email",
@@ -99,7 +99,7 @@ class TestAccountEnumeration:
         assert body["status_code"] == 200
         assert "reset link" in body["message"].lower()
 
-    async def test_response_message_is_identical_for_both_cases(
+    async def test_forgot_password_returns_identical_message_regardless_of_email_existence(
         self, client: AsyncClient
     ) -> None:
         """The message wording must be the same regardless of whether the account exists."""
@@ -129,7 +129,7 @@ class TestAccountEnumeration:
 # ---------------------------------------------------------------------------
 
 class TestTokenGeneration:
-    async def test_token_is_created_for_registered_user(self, client: AsyncClient) -> None:
+    async def test_forgot_password_creates_token_when_user_exists(self, client: AsyncClient) -> None:
         create_token_mock = AsyncMock(return_value="fake-raw-token")
 
         with (
@@ -141,7 +141,7 @@ class TestTokenGeneration:
 
         create_token_mock.assert_awaited_once()
 
-    async def test_token_is_not_created_for_unknown_email(self, client: AsyncClient) -> None:
+    async def test_forgot_password_skips_token_creation_when_user_not_found(self, client: AsyncClient) -> None:
         create_token_mock = AsyncMock(return_value="should-not-be-called")
 
         with (
@@ -158,7 +158,7 @@ class TestTokenGeneration:
 # ---------------------------------------------------------------------------
 
 class TestFailureHandling:
-    async def test_still_returns_200_when_email_service_fails(
+    async def test_forgot_password_returns_200_when_email_service_fails(
         self, client: AsyncClient
     ) -> None:
         """Email delivery failure must not surface as an error to the caller."""
@@ -175,7 +175,7 @@ class TestFailureHandling:
 
         assert response.status_code == 200
 
-    async def test_still_returns_200_on_database_failure(
+    async def test_forgot_password_returns_200_when_database_fails(
         self, client: AsyncClient
     ) -> None:
         """Database failure must not expose internals — safe 200 returned."""
@@ -190,7 +190,7 @@ class TestFailureHandling:
         # The endpoint always returns 200.
         assert response.status_code == 200
 
-    async def test_error_response_contains_no_internal_detail(
+    async def test_forgot_password_response_contains_no_internal_error_detail(
         self, client: AsyncClient
     ) -> None:
         """Response body must never contain stack traces or internal messages."""
@@ -212,7 +212,7 @@ class TestFailureHandling:
 # ---------------------------------------------------------------------------
 
 class TestResponseShape:
-    async def test_response_matches_api_envelope(self, client: AsyncClient) -> None:
+    async def test_forgot_password_response_matches_api_envelope(self, client: AsyncClient) -> None:
         with (
             patch("app.services.auth._get_user_by_email", new_callable=AsyncMock, return_value=_make_user()),
             patch("app.services.auth._create_reset_token", new_callable=AsyncMock, return_value="tok"),
