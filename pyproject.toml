@@ -10,7 +10,7 @@ dependencies = [
     "asyncpg>=0.30.0",
     "alembic>=1.14.0",
     "pydantic-settings>=2.7.0",
-    "resend>=2.30.0",
+    "resend[async]>=2.30.0",
     "slowapi>=0.1.9",
 ]
 

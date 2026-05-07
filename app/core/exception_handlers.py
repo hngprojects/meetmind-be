@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 
 async def validation_exception_handler(
-    request: Request,
+    request: Request,  # noqa: ARG001
     exc: RequestValidationError,
 ):
     """
@@ -23,7 +23,7 @@ async def validation_exception_handler(
     errors = []
 
     for err in exc.errors():
-        field = err["loc"][-1] if err["loc"] else "body"
+        field = str(err["loc"][-1]) if err["loc"] else "body"
 
         if field == "email":
             message = "A valid email address is required"

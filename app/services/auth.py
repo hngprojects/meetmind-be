@@ -149,9 +149,10 @@ async def request_password_reset(db: AsyncSession, email: str) -> None:
         try:
             await _send_reset_email(user.email, reset_link)
         except Exception as email_exc:  # noqa: BLE001
+            email_hint = user.email.split("@")[-1] if "@" in user.email else "redacted"
             logger.error(
-                "Failed to send password reset email to %s: %s",
-                user.email,
+                "Failed to send password reset email (recipient_domain=%s): %s",
+                email_hint,
                 email_exc,
                 exc_info=True,
             )
