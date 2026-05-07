@@ -8,17 +8,15 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
+from fastapi import Request
 from jose import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.exceptions import UserAlreadyExistsException
-from app.models.user import RefreshToken, User
-from app.schemas.auth import SignupRequest
-
 from app.models.user import ActiveSession, RefreshToken, User
-from fastapi import Request
+from app.schemas.auth import SignupRequest
 
 
 def _now() -> datetime:
@@ -156,6 +154,27 @@ class AuthService:
         return jwt.decode(
             token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
         )
+        
+        
+        
+    @staticmethod
+    async def decode_refresh_token(token: str) -> dict:
+        """Decode and validate a refresh JWT.
+
+        Args:
+            token: The encoded refresh JWT.
+
+        Returns:
+            The decoded claims dict.
+
+        Raises:
+            jose.JWTError: If the token is invalid or expired.
+        """
+        payload = jwt.decode(
+            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
+        )
+        return payload
+        
 
     @staticmethod
     async def create_refresh_token(db: AsyncSession, user_id: uuid.UUID) -> str:
@@ -249,9 +268,7 @@ class AuthService:
         Raises:
             jose.JWTError: If the token signature is invalid or has expired.
         """
-        payload = jwt.decode(
-            refresh_token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
-        )
+        payload = await AuthService.decode_refresh_token(refresh_token)
         session_id = uuid.UUID(payload["session_id"])
         user_id = uuid.UUID(payload["sub"])
 
@@ -272,3 +289,33 @@ class AuthService:
         session.last_seen_at = _now()
         await db.commit()
         return session
+
+
+    @staticmethod
+    async def revoke_session(db: AsyncSession, refresh_token: str) -> bool:
+        """Manually revoke a specific session (Logout).
+
+        Args:
+            db: Active async database session.
+            refresh_token: The raw refresh JWT to be revoked.
+
+        Returns:
+            True if the session was found and deleted, False otherwise.
+        """
+        try:
+            payload = await AuthService.decode_refresh_token(refresh_token)
+            session_id = uuid.UUID(payload["session_id"])
+        except Exception:
+            return False
+
+        result = await db.execute(
+            select(ActiveSession).where(ActiveSession.id == session_id)
+        )
+        session = result.scalar_one_or_none()
+
+        if session:
+            await db.delete(session)
+            await db.commit()
+            return True
+        
+        return False
