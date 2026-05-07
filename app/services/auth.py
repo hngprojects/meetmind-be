@@ -80,7 +80,7 @@ async def _create_reset_token(db: AsyncSession, user: User) -> str:
         str: Raw password reset token.
     """
     raw_token = secrets.token_urlsafe(32)
-    expires_at = datetime.utcnow() + timedelta(
+    expires_at = datetime.now(timezone.utc) + timedelta(
         minutes=settings.RESET_TOKEN_EXPIRE_MINUTES
     )
  
@@ -108,8 +108,8 @@ async def _send_reset_email(email: str, reset_link: str) -> None:
     """
     resend.api_key = settings.RESEND_API_KEY
 
-    resend.Emails.send({
-        "from": "MeetMind <onbording@resend.dev>",
+    await resend.Emails.send_async({
+        "from": "MeetMind <onboarding@resend.dev>",
         "to": email,
         "subject": "Reset your MeetMind password",
         "html": (

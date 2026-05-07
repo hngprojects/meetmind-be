@@ -41,7 +41,7 @@ class PasswordResetToken(Base, UUIDPrimaryKey):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime | None] = mapped_column(
         DateTime, server_default=func.now()

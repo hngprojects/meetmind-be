@@ -23,7 +23,7 @@ async def validation_exception_handler(
     errors = []
 
     for err in exc.errors():
-        field = err["loc"][-1]
+        field = err["loc"][-1] if err["loc"] else "body"
 
         if field == "email":
             message = "A valid email address is required"

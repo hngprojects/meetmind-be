@@ -4,7 +4,7 @@ os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+asyncpg://postgres:postgres@localhost:5432/test",
 )
-os.environ.setdefault("TESTING", "true")
+os.environ["TESTING"] = "true"
 
 
 import pytest  # noqa: E402

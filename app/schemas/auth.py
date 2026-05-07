@@ -13,7 +13,7 @@ class ForgotPasswordRequest(BaseModel):
 
     @field_validator("email", mode="before")
     @classmethod
-    def reject_blank(cls, v: str) -> str:
+    def reject_blank(cls, v: object) -> object:
         """
         Prevent empty or whitespace-only email values.
 
@@ -21,11 +21,13 @@ class ForgotPasswordRequest(BaseModel):
             v: Raw email input value.
 
         Returns:
-            str: Sanitized email value.
+            object: Sanitized email value.
 
         Raises:
             ValueError: If the email is empty.
         """
-        if not v or not v.strip():
+        if v is None:
+            raise ValueError("Email is required")
+        if isinstance(v, str) and not v.strip():
             raise ValueError("Email is required")
         return v
