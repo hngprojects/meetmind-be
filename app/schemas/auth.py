@@ -1,7 +1,7 @@
-"""Pydantic schemas for authentication request payloads."""
+"""Pydantic schemas for authentication request and response payloads."""
 
+from __future__ import annotations
 import re
-
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
@@ -66,3 +66,107 @@ class SignupRequest(BaseModel):
         if not re.search(r"\d", v):
             raise ValueError("Password must contain at least one digit")
         return v
+
+
+
+# ──  schemas for session lifecycle (AUTH-SES-07-BE) ─────────────────────────
+
+class SigninRequest(BaseModel):
+    """Payload for authenticating an existing user account.
+
+    Attributes:
+        email: The email address the user registered with.
+        password: The plaintext password to verify against the stored hash.
+    """
+
+    email: EmailStr = Field(..., max_length=255, description="User's email address")
+    password: str = Field(..., max_length=255, description="User's password")
+
+
+class RefreshRequest(BaseModel):
+    """Payload for rotating an access token using a refresh token.
+
+    Attributes:
+        refresh_token: The signed refresh JWT previously issued on login.
+            Must be valid, unexpired, and map to an existing active session.
+    """
+
+    refresh_token: str = Field(..., description="Refresh JWT issued at login")
+
+
+class LogoutRequest(BaseModel):
+    """Payload for terminating the current session.
+
+    Attributes:
+        refresh_token: The refresh JWT whose session row should be deleted.
+            The access token is validated separately via the Authorization
+            header; this token identifies which session to revoke.
+    """
+
+    refresh_token: str = Field(..., description="Refresh JWT to be revoked")
+
+
+class TokenData(BaseModel):
+    """Token pair returned immediately after a successful login.
+
+    Both the access token and refresh token are issued together. The
+    access token is short-lived and used to authenticate requests. The
+    refresh token is long-lived and used only to obtain new access tokens.
+
+    Attributes:
+        access_token: Signed JWT for authenticating API requests. Include
+            in the ``Authorization: Bearer <token>`` header.
+        refresh_token: Signed JWT for obtaining new access tokens via
+            ``POST /auth/refresh``. Store securely; treat as a secret.
+        token_type: Always ``"bearer"``.
+        expires_in: Lifetime of the access token in seconds.
+    """
+
+    access_token: str = Field(..., description="Short-lived JWT for API access")
+    refresh_token: str = Field(..., description="Long-lived JWT for token rotation")
+    token_type: str = Field(default="bearer", description="Token scheme")
+    expires_in: int = Field(..., description="Access token lifetime in seconds")
+
+
+class AccessTokenData(BaseModel):
+    """New access token returned after a successful token rotation.
+
+    Only the access token is reissued on rotation. The refresh token and
+    its session row are preserved and updated with a fresh ``last_seen_at``
+    timestamp.
+
+    Attributes:
+        access_token: The newly issued JWT for authenticating API requests.
+        token_type: Always ``"bearer"``.
+        expires_in: Lifetime of the new access token in seconds.
+    """
+
+    access_token: str = Field(..., description="Newly issued JWT for API access")
+    token_type: str = Field(default="bearer", description="Token scheme")
+    expires_in: int = Field(..., description="Access token lifetime in seconds")
+
+
+class UserData(BaseModel):
+    """Current user profile returned from ``GET /auth/me``.
+
+    Attributes:
+        id: UUID of the user record as a string.
+        name: User's display name, or ``None`` if not yet set.
+        email: The verified email address on the account.
+        role: Permission role assigned to the user, or ``None`` if unset.
+        is_verified: Whether the user has confirmed their email address.
+        next_step: Routing hint for the frontend. One of:
+
+            - ``"verify_email"`` — account exists but email is unconfirmed.
+            - ``"onboarding"`` — verified but profile is incomplete.
+            - ``"dashboard"`` — fully set up; proceed to the main app.
+    """
+
+    id: str = Field(..., description="User UUID as a string")
+    name: str | None = Field(None, description="User's display name")
+    email: str = Field(..., description="User's email address")
+    role: str | None = Field(None, description="User's permission role")
+    is_verified: bool = Field(..., description="Whether the email is confirmed")
+    next_step: str = Field(
+        ..., description="Frontend routing hint: dashboard | onboarding | verify_email"
+    )
