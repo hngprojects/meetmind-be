@@ -8,123 +8,73 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from fastapi import Request
+from fastapi import Request, status
 from jose import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.exceptions import UserAlreadyExistsException
-from app.models.user import ActiveSession, RefreshToken, User
+from app.core.responses import APIError
+from app.models.user import ActiveSession, PasswordResetToken, RefreshToken, User
 from app.schemas.auth import SignupRequest
+
+# Pre-computed dummy hash for timing attack protection
+_DUMMY_HASH: str = bcrypt.hashpw(b"__dummy__", bcrypt.gensalt()).decode()
+
+RESET_TOKEN_EXPIRY_MINUTES = 60
 
 
 def _now() -> datetime:
-    """Return the current UTC timestamp as a timezone-aware datetime.
-
-    Returns:
-        The current time in UTC.
-    """
     return datetime.now(timezone.utc)
 
 
 def _hash_token(raw: str) -> str:
-    """Compute a stable SHA-256 digest for a refresh-token string.
-
-    Args:
-        raw: The raw token string to hash.
-
-    Returns:
-        Hex-encoded SHA-256 digest suitable for database lookup.
-    """
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
 class AuthService:
-    """Encapsulate authentication primitives used by the auth routes.
+    """Authentication service handling users, tokens, and sessions."""
 
-    All methods are coroutines so they compose cleanly with the async
-    SQLAlchemy session and FastAPI request lifecycle.
-    """
-
+    # -------------------------
+    # Password utilities
+    # -------------------------
     @staticmethod
     async def hash_password(password: str) -> str:
-        """Hash a plaintext password using bcrypt.
-
-        Args:
-            password: The plaintext password supplied by the user.
-
-        Returns:
-            The bcrypt-hashed password as a UTF-8 string.
-        """
         salt = bcrypt.gensalt()
-        return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
+        return bcrypt.hashpw(password.encode(), salt).decode()
 
     @staticmethod
     async def verify_password(password: str, hashed: str) -> bool:
-        """Verify a plaintext password against a bcrypt hash.
+        return bcrypt.checkpw(password.encode(), hashed.encode())
 
-        Args:
-            password: The plaintext password being checked.
-            hashed: The previously stored bcrypt hash.
-
-        Returns:
-            ``True`` if the password matches the hash, otherwise ``False``.
-        """
-        return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
-
+    # -------------------------
+    # User management
+    # -------------------------
     @staticmethod
     async def check_email_exists(email: str, db: AsyncSession) -> bool:
-        """Check whether a user is already registered with the given email.
-
-        Args:
-            email: Email address to look up.
-            db: Active async database session.
-
-        Returns:
-            ``True`` if a user row exists for ``email``, else ``False``.
-        """
         result = await db.execute(select(User).where(User.email == email))
         return result.scalar_one_or_none() is not None
 
     @staticmethod
     async def create_user(request: SignupRequest, db: AsyncSession) -> User:
-        """Create a new user row, after asserting the email is unused.
-
-        Args:
-            request: Validated signup payload.
-            db: Active async database session.
-
-        Returns:
-            The newly created :class:`User`, flushed but not committed.
-
-        Raises:
-            UserAlreadyExistsException: If ``request.email`` is already
-                registered to another account.
-        """
         if await AuthService.check_email_exists(request.email, db):
             raise UserAlreadyExistsException(email=request.email)
 
-        hashed_password = await AuthService.hash_password(request.password)
         user = User(
             name=request.name,
             email=request.email,
-            password_hash=hashed_password,
+            password_hash=await AuthService.hash_password(request.password),
         )
         db.add(user)
         await db.flush()
         return user
 
+    # -------------------------
+    # JWT tokens
+    # -------------------------
     @staticmethod
     async def create_access_token(user: User) -> str:
-        """Issue a signed JWT access token for the given user.
-
-        Args:
-            user: The user the token should be issued for.
-
-        Returns:
-            The encoded JWT as a compact serialization string.
-        """
         expire = _now() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         payload = {
             "sub": str(user.id),
@@ -134,97 +84,64 @@ class AuthService:
             "iat": _now(),
             "type": "access",
         }
-        return jwt.encode(
-            payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
-        )
+        return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
     @staticmethod
     async def decode_access_token(token: str) -> dict:
-        """Decode and validate a previously issued access token.
-
-        Args:
-            token: The encoded JWT string.
-
-        Returns:
-            The decoded JWT claims as a dictionary.
-
-        Raises:
-            jose.JWTError: If the token signature or claims are invalid.
-        """
         return jwt.decode(
-            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
+            token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM],
         )
-        
-        
-        
+
     @staticmethod
     async def decode_refresh_token(token: str) -> dict:
-        """Decode and validate a refresh JWT.
-
-        Args:
-            token: The encoded refresh JWT.
-
-        Returns:
-            The decoded claims dict.
-
-        Raises:
-            jose.JWTError: If the token is invalid or expired.
-        """
-        payload = jwt.decode(
-            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
+        return jwt.decode(
+            token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM],
         )
-        return payload
-        
 
+    # -------------------------
+    # Refresh token (DB-backed)
+    # -------------------------
     @staticmethod
-    async def create_refresh_token(db: AsyncSession, user_id: uuid.UUID) -> str:
-        """Generate, persist, and return a new refresh token.
-
-        Only the SHA-256 hash of the token is stored in the database; the
-        raw value is returned to the caller for delivery to the client.
-
-        Args:
-            db: Active async database session.
-            user_id: Identifier of the user the token is issued for.
-
-        Returns:
-            The raw URL-safe refresh-token string.
-        """
+    async def create_refresh_token(
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        ip_address: str | None = None,
+        device_hint: str | None = None,
+    ) -> tuple[str, datetime]:
         raw = secrets.token_urlsafe(48)
         token_hash = _hash_token(raw)
-        expires_at = _now() + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
+        now = _now()
+        expires_at = now + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
 
-        rt = RefreshToken(
+        db.add(RefreshToken(
             user_id=user_id,
             token_hash=token_hash,
             expires_at=expires_at,
-        )
-        db.add(rt)
+        ))
+        db.add(ActiveSession(
+            user_id=user_id,
+            refresh_token_hash=token_hash,
+            ip_address=ip_address,
+            device_hint=device_hint,
+            last_seen_at=now,
+        ))
         await db.commit()
-        await db.refresh(rt)
-        return raw
 
+        return raw, expires_at
 
+    # -------------------------
+    # Session-aware refresh tokens (JWT-based sessions)
+    # -------------------------
     @staticmethod
     async def create_session_aware_token(
-        db: AsyncSession, 
-        user: User, 
-        request: Request | None = None
+        db: AsyncSession,
+        user: User,
+        request: Request | None = None,
     ) -> str:
-        """Create an active session row and return a signed refresh JWT.
-
-        This method implements session-based tracking. The session row stores a 
-        SHA-256 hash of the raw JWT. The session's UUID is embedded in the 
-        JWT payload to enable fast lookup and theft detection during rotation.
-
-        Args:
-            db: Active async database session.
-            user: The authenticated user instance.
-            request: Optional FastAPI request to capture device metadata and IP.
-
-        Returns:
-            The encoded refresh JWT as a compact serialization string.
-        """
         session = ActiveSession(
             user_id=user.id,
             refresh_token_hash="pending",
@@ -243,44 +160,31 @@ class AuthService:
             "iat": _now(),
             "type": "refresh",
         }
+
         raw_jwt = jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
-        
         session.refresh_token_hash = _hash_token(raw_jwt)
+
         await db.commit()
         return raw_jwt
 
-
     @staticmethod
     async def rotate_session(db: AsyncSession, refresh_token: str) -> ActiveSession | None:
-        """Validate a refresh token and perform automatic theft detection.
-
-        Decodes the token to find the session_id. If the provided token hash 
-        does not match the stored hash, it assumes the token was compromised 
-        and revokes all active sessions for that user.
-
-        Args:
-            db: Active async database session.
-            refresh_token: The raw refresh JWT provided by the client.
-
-        Returns:
-            The validated ActiveSession object, or None if invalid or revoked.
-
-        Raises:
-            jose.JWTError: If the token signature is invalid or has expired.
-        """
         payload = await AuthService.decode_refresh_token(refresh_token)
+
         session_id = uuid.UUID(payload["session_id"])
         user_id = uuid.UUID(payload["sub"])
 
         result = await db.execute(select(ActiveSession).where(ActiveSession.id == session_id))
         session = result.scalar_one_or_none()
 
-        if session is None:
+        if not session:
             return None
 
         if session.refresh_token_hash != _hash_token(refresh_token):
-            # Token Reuse Detected: Nuke all sessions for safety
-            all_sessions = await db.execute(select(ActiveSession).where(ActiveSession.user_id == user_id))
+            # token reuse detected → revoke all sessions
+            all_sessions = await db.execute(
+                select(ActiveSession).where(ActiveSession.user_id == user_id)
+            )
             for s in all_sessions.scalars().all():
                 await db.delete(s)
             await db.commit()
@@ -290,18 +194,8 @@ class AuthService:
         await db.commit()
         return session
 
-
     @staticmethod
     async def revoke_session(db: AsyncSession, refresh_token: str) -> bool:
-        """Manually revoke a specific session (Logout).
-
-        Args:
-            db: Active async database session.
-            refresh_token: The raw refresh JWT to be revoked.
-
-        Returns:
-            True if the session was found and deleted, False otherwise.
-        """
         try:
             payload = await AuthService.decode_refresh_token(refresh_token)
             session_id = uuid.UUID(payload["session_id"])
@@ -317,5 +211,205 @@ class AuthService:
             await db.delete(session)
             await db.commit()
             return True
-        
+
         return False
+
+    # -------------------------
+    # Login
+    # -------------------------
+    @staticmethod
+    async def login(email: str, password: str, db: AsyncSession) -> User:
+        result = await db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+
+        stored_hash = user.password_hash if (user and user.password_hash) else _DUMMY_HASH
+        password_ok = await AuthService.verify_password(password, stored_hash)
+
+        if not user or not user.password_hash or not password_ok:
+            raise APIError(
+                "Invalid email or password",
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                code="invalid_credentials",
+            )
+
+        return user
+
+    # -------------------------
+    # Password reset
+    # -------------------------
+    @staticmethod
+    async def create_password_reset_token(db: AsyncSession, user: User) -> str:
+        result = await db.execute(
+            select(PasswordResetToken).where(
+                PasswordResetToken.user_id == user.id,
+                PasswordResetToken.used_at.is_(None),
+            )
+        )
+
+        now = _now()
+        for old in result.scalars().all():
+            old.used_at = now
+
+        raw = secrets.token_urlsafe(48)
+        token_hash = _hash_token(raw)
+        expires_at = now + timedelta(minutes=RESET_TOKEN_EXPIRY_MINUTES)
+
+        db.add(PasswordResetToken(
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+        ))
+
+        await db.commit()
+        return raw
+
+    @staticmethod
+    async def reset_password(raw_token: str, new_password: str, db: AsyncSession) -> None:
+        token_hash = _hash_token(raw_token)
+
+        result = await db.execute(
+            select(PasswordResetToken).where(
+                PasswordResetToken.token_hash == token_hash
+            )
+        )
+        rt = result.scalar_one_or_none()
+
+        _invalid = APIError(
+            "This reset link is invalid or has expired.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="invalid_reset_token",
+        )
+
+        if not rt or rt.used_at:
+            raise _invalid
+
+        expires_at = rt.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+        if expires_at < _now():
+            raise _invalid
+
+        result = await db.execute(select(User).where(User.id == rt.user_id))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            raise _invalid
+
+        user.password_hash = await AuthService.hash_password(new_password)
+        rt.used_at = _now()
+
+        await db.commit()
+
+    # -------------------------
+    # Session helpers
+    # -------------------------
+    @staticmethod
+    def get_next_step(user: User) -> str:
+        if not user.is_verified:
+            return "verify_email"
+        if not user.job_title or not user.company:
+            return "onboarding"
+        return "dashboard"
+
+    @staticmethod
+    async def refresh_access_token(
+        raw_token: str,
+        db: AsyncSession,
+        ip_address: str | None = None,
+    ) -> dict:
+        token_hash = _hash_token(raw_token)
+
+        result = await db.execute(
+            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+        )
+        rt = result.scalar_one_or_none()
+
+        _unauthorized = APIError(
+            "Invalid or expired refresh token",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="unauthorized",
+        )
+
+        if not rt or rt.revoked or rt.expires_at < _now():
+            raise _unauthorized
+
+        result = await db.execute(select(User).where(User.id == rt.user_id))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            raise _unauthorized
+
+        new_raw = secrets.token_urlsafe(48)
+        new_hash = _hash_token(new_raw)
+        now = _now()
+
+        new_expires = now + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
+
+        db.add(RefreshToken(
+            user_id=rt.user_id,
+            token_hash=new_hash,
+            expires_at=new_expires,
+        ))
+
+        rt.revoked = True
+
+        session_result = await db.execute(
+            select(ActiveSession).where(
+                ActiveSession.refresh_token_hash == token_hash
+            )
+        )
+        session = session_result.scalar_one_or_none()
+
+        if session:
+            session.refresh_token_hash = new_hash
+            session.last_seen_at = now
+            if ip_address:
+                session.ip_address = ip_address
+        else:
+            db.add(ActiveSession(
+                user_id=rt.user_id,
+                refresh_token_hash=new_hash,
+                ip_address=ip_address,
+                last_seen_at=now,
+            ))
+
+        await db.commit()
+
+        access_token = await AuthService.create_access_token(user)
+
+        return {
+            "access_token": access_token,
+            "refresh_token": new_raw,
+            "user": user,
+        }
+
+    @staticmethod
+    async def logout(raw_token: str, db: AsyncSession) -> None:
+        token_hash = _hash_token(raw_token)
+
+        result = await db.execute(
+            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+        )
+        rt = result.scalar_one_or_none()
+
+        if not rt:
+            raise APIError(
+                "Invalid refresh token",
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                code="invalid_refresh_token",
+            )
+
+        rt.revoked = True
+
+        session_result = await db.execute(
+            select(ActiveSession).where(
+                ActiveSession.refresh_token_hash == token_hash
+            )
+        )
+        session = session_result.scalar_one_or_none()
+
+        if session:
+            await db.delete(session)
+
+        await db.commit()
