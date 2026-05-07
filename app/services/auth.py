@@ -17,6 +17,9 @@ from app.core.exceptions import UserAlreadyExistsException
 from app.models.user import RefreshToken, User
 from app.schemas.auth import SignupRequest
 
+from app.models.user import ActiveSession, RefreshToken, User
+from fastapi import Request
+
 
 def _now() -> datetime:
     """Return the current UTC timestamp as a timezone-aware datetime.
@@ -181,3 +184,91 @@ class AuthService:
         await db.commit()
         await db.refresh(rt)
         return raw
+
+
+    @staticmethod
+    async def create_session_aware_token(
+        db: AsyncSession, 
+        user: User, 
+        request: Request | None = None
+    ) -> str:
+        """Create an active session row and return a signed refresh JWT.
+
+        This method implements session-based tracking. The session row stores a 
+        SHA-256 hash of the raw JWT. The session's UUID is embedded in the 
+        JWT payload to enable fast lookup and theft detection during rotation.
+
+        Args:
+            db: Active async database session.
+            user: The authenticated user instance.
+            request: Optional FastAPI request to capture device metadata and IP.
+
+        Returns:
+            The encoded refresh JWT as a compact serialization string.
+        """
+        session = ActiveSession(
+            user_id=user.id,
+            refresh_token_hash="pending",
+            device_hint=request.headers.get("user-agent", "")[:120] if request else None,
+            ip_address=request.client.host if request else None,
+            last_seen_at=_now(),
+        )
+        db.add(session)
+        await db.flush()
+
+        expire = _now() + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
+        payload = {
+            "sub": str(user.id),
+            "session_id": str(session.id),
+            "exp": expire,
+            "iat": _now(),
+            "type": "refresh",
+        }
+        raw_jwt = jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+        
+        session.refresh_token_hash = _hash_token(raw_jwt)
+        await db.commit()
+        return raw_jwt
+
+
+    @staticmethod
+    async def rotate_session(db: AsyncSession, refresh_token: str) -> ActiveSession | None:
+        """Validate a refresh token and perform automatic theft detection.
+
+        Decodes the token to find the session_id. If the provided token hash 
+        does not match the stored hash, it assumes the token was compromised 
+        and revokes all active sessions for that user.
+
+        Args:
+            db: Active async database session.
+            refresh_token: The raw refresh JWT provided by the client.
+
+        Returns:
+            The validated ActiveSession object, or None if invalid or revoked.
+
+        Raises:
+            jose.JWTError: If the token signature is invalid or has expired.
+        """
+        payload = jwt.decode(
+            refresh_token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
+        )
+        session_id = uuid.UUID(payload["session_id"])
+        user_id = uuid.UUID(payload["sub"])
+
+        result = await db.execute(select(ActiveSession).where(ActiveSession.id == session_id))
+        session = result.scalar_one_or_none()
+
+        if session is None:
+            return None
+
+        if session.refresh_token_hash != _hash_token(refresh_token):
+            # Token Reuse Detected: Nuke all sessions for safety
+            all_sessions = await db.execute(select(ActiveSession).where(ActiveSession.user_id == user_id))
+            for s in all_sessions.scalars().all():
+                await db.delete(s)
+            await db.commit()
+            return None
+
+        session.last_seen_at = _now()
+        await db.commit()
+        return session
