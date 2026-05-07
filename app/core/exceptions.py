@@ -30,3 +30,9 @@ class UserAlreadyExistsException(AppBaseException):
         """
         self.email = email
         super().__init__(f"Email '{email}' is already registered.")
+
+class InvalidResetTokenException(AppBaseException):
+    """Raised when a reset token is missing, expired, or already used."""
+    def __init__(self):
+        super().__init__("Reset token is invalid or has expired.")
+        

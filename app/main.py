@@ -73,7 +73,7 @@ async def handle_validation_error(_: Request, exc: RequestValidationError):
     """
     return error(
         "Request validation failed",
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         code="validation_error",
         details=jsonable_encoder(exc.errors()),
     )

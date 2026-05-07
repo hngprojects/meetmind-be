@@ -9,12 +9,12 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 from jose import jwt
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.exceptions import UserAlreadyExistsException
-from app.models.user import RefreshToken, User
+from app.core.exceptions import UserAlreadyExistsException, InvalidResetTokenException
+from app.models.user import RefreshToken, User, PasswordResetToken
 from app.schemas.auth import SignupRequest
 
 
@@ -181,3 +181,44 @@ class AuthService:
         await db.commit()
         await db.refresh(rt)
         return raw
+
+    
+    @staticmethod
+    async def reset_password(
+        db: AsyncSession,
+        raw_token: str,
+        new_password: str,
+    ) -> None:
+        """Verify the reset token and update the user's password."""
+        token_hash = _hash_token(raw_token)
+        
+        # 1. Find the token
+        result = await db.execute(
+            select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
+        )
+        token_record = result.scalar_one_or_none()
+
+        # 2. Security Check (Generic error for all failure modes)
+        if not token_record or token_record.used_at:
+            raise InvalidResetTokenException()
+
+        # 3. Expiry Check
+        expires_at = token_record.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        
+        if _now() > expires_at:
+            raise InvalidResetTokenException()
+
+        # 4. Update User Password & Mark Token as Used
+        hashed_pwd = await AuthService.hash_password(new_password)
+        
+        # Update user
+        await db.execute(
+            update(User).where(User.id == token_record.user_id).values(password_hash=hashed_pwd)
+        )
+        
+        # Mark token used
+        token_record.used_at = _now()
+        
+        await db.commit()

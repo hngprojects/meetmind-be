@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.exceptions import UserAlreadyExistsException
+from app.core.exceptions import UserAlreadyExistsException, InvalidResetTokenException
 from app.core.responses import APIError, success
 from app.db.session import get_session
-from app.schemas.auth import SignupRequest
+from app.schemas.auth import SignupRequest, ResetPasswordRequest
 from app.schemas.verification import ResendVerificationRequest, VerifyEmailRequest
 from app.services.auth import AuthService
 from app.services.verification_service import VerificationService
@@ -127,3 +127,24 @@ async def resend_verification(
     """
     await verification_service.resend_verification(db, payload.email)
     return success(message="Verification email resent")
+
+
+@router.post("/reset-password")
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_session),
+):
+    """Verify reset token and update password."""
+    try:
+        await AuthService.reset_password(
+            db=db,
+            raw_token=payload.token,
+            new_password=payload.new_password
+        )
+        return success(message="Password reset successfully")
+    except InvalidResetTokenException as exc:
+        raise APIError(
+            str(exc),
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="invalid_token"
+        )
