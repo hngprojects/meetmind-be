@@ -9,6 +9,7 @@ from app.api.v1.routes import (
     integrations,
     interviews,
     meetings,
+    session,
     users,
     workspaces,
 )
@@ -16,7 +17,8 @@ from app.api.v1.routes import (
 api_router = APIRouter()
 
 api_router.include_router(health.router, prefix="/health", tags=["Health"])
-api_router.include_router(auth.router, prefix="/auth", tags=["Auth"])
+api_router.include_router(auth.router, prefix="/auth", tags=["Auth"]) # signup, verify-email, resend-verification
+api_router.include_router(session.router, prefix="/auth", tags=["Auth"]) # refresh, logout, me
 api_router.include_router(users.router, prefix="/users", tags=["Users"])
 api_router.include_router(workspaces.router, prefix="/workspaces", tags=["Workspaces"])
 api_router.include_router(meetings.router, prefix="/meetings", tags=["Meetings"])
