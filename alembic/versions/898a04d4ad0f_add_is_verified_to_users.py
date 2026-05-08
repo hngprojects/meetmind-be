@@ -19,7 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.add_column('users', sa.Column('is_verified', sa.Boolean(), nullable=False, server_default=sa.false()))
-    op.add_column('password_reset_tokens', sa.Column('updated_at', sa.DateTime(), nullable=True))
+    op.add_column('password_reset_tokens', sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True))
 
 
 def downgrade() -> None:

@@ -53,12 +53,9 @@ def not_found(resource: str) -> HTTPException:
     """
     return HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail={
-            "status_code": status.HTTP_404_NOT_FOUND,
-            "message": f"{resource} not found",
-            "data": None
-        }
+        detail=f"{resource} not found",
     )
+
 
 
 def unauthorized(message: str = "Authentication required") -> HTTPException:
@@ -73,9 +70,5 @@ def unauthorized(message: str = "Authentication required") -> HTTPException:
     """
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail={
-            "status_code": status.HTTP_401_UNAUTHORIZED,
-            "message": message,
-            "data": None
-        }
+        detail=message,
     )
