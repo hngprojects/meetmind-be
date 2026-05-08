@@ -3,8 +3,6 @@
 import logging
 
 from fastapi import APIRouter, Depends, Request, Response, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import DBSession
@@ -12,6 +10,7 @@ from app.core.config import settings
 from app.core.exceptions import UserAlreadyExistsException
 from app.core.responses import APIError, success
 from app.db.session import get_session
+from app.core.limiter import limiter
 from app.schemas.auth import ForgotPasswordRequest, SignupRequest
 from app.schemas.verification import ResendVerificationRequest, VerifyEmailRequest
 from app.services.auth import AuthService
@@ -20,7 +19,6 @@ from app.services.verification_service import VerificationService
 router = APIRouter()
 logger = logging.getLogger(__name__)
 verification_service = VerificationService()
-limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
@@ -153,5 +151,5 @@ async def forgot_password(
 
     return success(
         message="If an account with that email exists, a reset link has been sent.",
-        status_code=200,
+        status_code=status.HTTP_200_OK,
     )

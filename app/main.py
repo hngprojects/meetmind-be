@@ -6,20 +6,18 @@ errors to the standardized response envelope.
 """
 
 
-from fastapi import FastAPI, Request, status
-from fastapi.encoders import jsonable_encoder
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.exception_handlers import validation_exception_handler
+from app.core.limiter import limiter
 from app.core.responses import APIError, error, success
 
-limiter = Limiter(key_func=get_remote_address)
 
 
 app = FastAPI(title=settings.PROJECT_NAME)
@@ -67,26 +65,6 @@ async def handle_http_error(_: Request, exc: StarletteHTTPException):
         status_code=exc.status_code,
         code="http_error",
         details=exc.detail if not isinstance(exc.detail, str) else None,
-    )
-
-
-@app.exception_handler(RequestValidationError)
-async def handle_validation_error(_: Request, exc: RequestValidationError):
-    """Render Pydantic request validation failures using the error envelope.
-
-    Args:
-        _: The incoming request (unused).
-        exc: The raised :class:`RequestValidationError`.
-
-    Returns:
-        A :class:`fastapi.responses.JSONResponse` with HTTP ``422`` and the
-        per-field errors under ``error.details``.
-    """
-    return error(
-        "Request validation failed",
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        code="validation_error",
-        details=jsonable_encoder(exc.errors()),
     )
 
 

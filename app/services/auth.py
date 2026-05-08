@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 import bcrypt
 from jose import jwt
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -227,6 +227,11 @@ class AuthService:
         expires_at = datetime.now(timezone.utc) + timedelta(
             minutes=settings.RESET_TOKEN_EXPIRE_MINUTES
         )
+
+        # Invalidate any existing tokens before issuing a new one
+        await db.execute(
+            delete(PasswordResetToken).where(PasswordResetToken.user_id == user.id)
+        )
     
         db_token = PasswordResetToken(
             user_id=user.id,
@@ -294,7 +299,7 @@ class AuthService:
                 await AuthService.send_reset_email(user.email, reset_link)
             except Exception as email_exc:  # noqa: BLE001
                 email_hint = user.email.split("@")[-1] if "@" in user.email else "redacted"
-                logger.error(
+                logger.exception(
                     "Failed to send password reset email (recipient_domain=%s): %s",
                     email_hint,
                     email_exc,
@@ -302,7 +307,7 @@ class AuthService:
                 )
     
         except Exception as exc:  # noqa: BLE001
-            logger.error(
+            logger.exception(
                 "Unexpected error during password reset request: %s",
                 exc,
                 exc_info=True,
