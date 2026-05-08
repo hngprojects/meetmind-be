@@ -30,11 +30,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    PROJECT_NAME: str = "fastapi-starter"
+    PROJECT_NAME: str = "meetmind"
     API_V1_PREFIX: str = "/api/v1"
 
     DATABASE_URL: PostgresDsn
-    TEST_DATABASE_URL: str
 
     JWT_SECRET: str
     JWT_ALGORITHM: str
@@ -43,8 +42,18 @@ class Settings(BaseSettings):
 
     RESET_TOKEN_EXPIRE_MINUTES: int = 15
     FRONTEND_URL: str = "http://localhost:3000"
-    RESEND_API_KEY: str
     TESTING: bool = False
+
+    APP_BASE_URL: str = "http://localhost:8000"
+    LOG_LEVEL: str = "INFO"
+
+    RESEND_API_KEY: str
+    EMAIL_FROM: str = "MeetMind <onboarding@resend.dev>"
+
+    GOOGLE_CLIENT_ID: str
+    GOOGLE_CLIENT_SECRET: str
+    GOOGLE_REDIRECT_URI: str
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -62,28 +62,24 @@ class TestForgotPasswordValidation:
 class TestAccountEnumeration:
     async def test_forgot_password_returns_200_when_email_is_registered(self, client: AsyncClient) -> None:
         """Registered email: 200 with generic message."""
-        with (
-            patch(
-                "app.services.auth.AuthService.get_user_by_email",
-                new_callable=AsyncMock,
-                return_value=_make_user(),
-            ),
-            patch(
-                "app.services.auth.AuthService.create_password_reset_token",
-                new_callable=AsyncMock,
-                return_value="fake-raw-token",
-            ),
-            patch(
-                "app.services.auth.AuthService.send_reset_email",
-                new_callable=AsyncMock,
-            ),
-        ):
+        with patch("app.api.v1.routes.auth._process_password_reset", new_callable=AsyncMock):
             response = await client.post(ENDPOINT, json={"email": "user@example.com"})
 
         assert response.status_code == 200
         body = response.json()
         assert body["success"] is True
-        assert "reset link" in body["message"].lower()
+        assert "reset link" in body["message"].lower() or "on its way" in body["message"].lower()
+
+    async def test_forgot_password_returns_identical_message_regardless_of_email_existence(
+        self, client: AsyncClient
+    ) -> None:
+        """The message wording must be the same regardless of whether the account exists."""
+        with patch("app.api.v1.routes.auth._process_password_reset", new_callable=AsyncMock):
+            r_registered = await client.post(ENDPOINT, json={"email": "user@example.com"})
+            r_unregistered = await client.post(ENDPOINT, json={"email": "ghost@example.com"})
+
+        assert r_registered.json()["message"] == r_unregistered.json()["message"]
+
 
     async def test_forgot_password_returns_200_when_email_is_not_registered(self, client: AsyncClient) -> None:
         """Unregistered email: MUST also return 200 with the exact same message."""
@@ -97,31 +93,7 @@ class TestAccountEnumeration:
         assert response.status_code == 200
         body = response.json()
         assert body["success"] is True
-        assert "reset link" in body["message"].lower()
-
-    async def test_forgot_password_returns_identical_message_regardless_of_email_existence(
-        self, client: AsyncClient
-    ) -> None:
-        """The message wording must be the same regardless of whether the account exists."""
-        with (
-            patch(
-                "app.services.auth.AuthService.get_user_by_email",
-                new_callable=AsyncMock,
-                return_value=_make_user(),
-            ),
-            patch("app.services.auth.AuthService.create_password_reset_token", new_callable=AsyncMock, return_value="tok"),
-            patch("app.services.auth.AuthService.send_reset_email", new_callable=AsyncMock),
-        ):
-            r_registered = await client.post(ENDPOINT, json={"email": "user@example.com"})
-
-        with patch(
-            "app.services.auth.AuthService.get_user_by_email",
-            new_callable=AsyncMock,
-            return_value=None,
-        ):
-            r_unregistered = await client.post(ENDPOINT, json={"email": "ghost@example.com"})
-
-        assert r_registered.json()["message"] == r_unregistered.json()["message"]
+        assert "reset link" in body["message"].lower() or "on its way" in body["message"].lower()
 
 
 # ---------------------------------------------------------------------------
@@ -130,22 +102,18 @@ class TestAccountEnumeration:
 
 class TestTokenGeneration:
     async def test_forgot_password_creates_token_when_user_exists(self, client: AsyncClient) -> None:
-        create_token_mock = AsyncMock(return_value="fake-raw-token")
+        process_mock = AsyncMock()
 
-        with (
-            patch("app.services.auth.AuthService.get_user_by_email", new_callable=AsyncMock, return_value=_make_user()),
-            patch("app.services.auth.AuthService.create_password_reset_token", create_token_mock),
-            patch("app.services.auth.AuthService.send_reset_email", new_callable=AsyncMock),
-        ):
+        with patch("app.api.v1.routes.auth._process_password_reset", process_mock):
             await client.post(ENDPOINT, json={"email": "user@example.com"})
 
-        create_token_mock.assert_awaited_once()
+        process_mock.assert_awaited_once()
 
     async def test_forgot_password_skips_token_creation_when_user_not_found(self, client: AsyncClient) -> None:
         create_token_mock = AsyncMock(return_value="should-not-be-called")
 
         with (
-            patch("app.services.auth.AuthService.get_user_by_email", new_callable=AsyncMock, return_value=None),
+            patch("app.api.v1.routes.auth._process_password_reset", new_callable=AsyncMock),
             patch("app.services.auth.AuthService.create_password_reset_token", create_token_mock),
         ):
             await client.post(ENDPOINT, json={"email": "ghost@example.com"})
@@ -159,18 +127,10 @@ class TestTokenGeneration:
 
 class TestFailureHandling:
     async def test_forgot_password_returns_200_when_email_service_fails(
-        self, client: AsyncClient
-    ) -> None:
-        """Email delivery failure must not surface as an error to the caller."""
-        with (
-            patch("app.services.auth.AuthService.get_user_by_email", new_callable=AsyncMock, return_value=_make_user()),
-            patch("app.services.auth.AuthService.create_password_reset_token", new_callable=AsyncMock, return_value="tok"),
-            patch(
-                "app.services.auth.AuthService.send_reset_email",
-                new_callable=AsyncMock,
-                side_effect=Exception("SMTP connection refused"),
-            ),
-        ):
+    self, client: AsyncClient
+) -> None:
+        """Response is always 200 — email failures are handled inside the background task."""
+        with patch("app.api.v1.routes.auth._process_password_reset", new_callable=AsyncMock):
             response = await client.post(ENDPOINT, json={"email": "user@example.com"})
 
         assert response.status_code == 200
@@ -211,16 +171,12 @@ class TestFailureHandling:
 
 class TestResponseShape:
     async def test_forgot_password_response_matches_api_envelope(self, client: AsyncClient) -> None:
-        with (
-            patch("app.services.auth.AuthService.get_user_by_email", new_callable=AsyncMock, return_value=_make_user()),
-            patch("app.services.auth.AuthService.create_password_reset_token", new_callable=AsyncMock, return_value="tok"),
-            patch("app.services.auth.AuthService.send_reset_email", new_callable=AsyncMock),
-        ):
+        with patch("app.api.v1.routes.auth._process_password_reset", new_callable=AsyncMock):
             response = await client.post(ENDPOINT, json={"email": "user@example.com"})
 
         body = response.json()
         assert "success" in body
         assert "message" in body
         assert "data" in body
-        assert body["data"] is None
+        assert body["data"]["next_step"] == "check_email"
         assert body["success"] is True

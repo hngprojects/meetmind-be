@@ -1,3 +1,5 @@
+"""Shared rate-limiter instance used across all route modules."""
+
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
