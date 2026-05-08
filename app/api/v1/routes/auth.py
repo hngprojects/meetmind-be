@@ -133,7 +133,7 @@ async def resend_verification(
     return success(message="Verification email resent")
 
 
-@router.post("/forgot-password", status_code=200)
+@router.post("/forgot-password", status_code=status.HTTP_200_OK)
 @limiter.limit("5/minute" if not settings.TESTING else "1000/minute")
 async def forgot_password(
     payload: ForgotPasswordRequest,

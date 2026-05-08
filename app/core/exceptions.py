@@ -7,6 +7,7 @@ standardized error envelope.
 """
 
 from fastapi import HTTPException
+from fastapi import status
 
 
 
@@ -51,9 +52,9 @@ def not_found(resource: str) -> HTTPException:
         HTTPException: Configured 404 exception response.
     """
     return HTTPException(
-        status_code=404,
+        status_code=status.HTTP_404_NOT_FOUND,
         detail={
-            "status_code": 404,
+            "status_code": status.HTTP_404_NOT_FOUND,
             "message": f"{resource} not found",
             "data": None
         }
@@ -71,9 +72,9 @@ def unauthorized(message: str = "Authentication required") -> HTTPException:
         HTTPException: Configured 401 exception response.
     """
     return HTTPException(
-        status_code=401,
+        status_code=status.HTTP_401_UNAUTHORIZED,
         detail={
-            "status_code": 401,
+            "status_code": status.HTTP_401_UNAUTHORIZED,
             "message": message,
             "data": None
         }
