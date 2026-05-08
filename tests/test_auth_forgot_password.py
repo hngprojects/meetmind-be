@@ -111,13 +111,15 @@ class TestTokenGeneration:
 
     async def test_forgot_password_skips_token_creation_when_user_not_found(self, client: AsyncClient) -> None:
         create_token_mock = AsyncMock(return_value="should-not-be-called")
-
         with (
-            patch("app.api.v1.routes.auth._process_password_reset", new_callable=AsyncMock),
+            patch(
+                "app.services.auth.AuthService.get_user_by_email",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
             patch("app.services.auth.AuthService.create_password_reset_token", create_token_mock),
         ):
             await client.post(ENDPOINT, json={"email": "ghost@example.com"})
-
         create_token_mock.assert_not_awaited()
 
 
@@ -132,7 +134,6 @@ class TestFailureHandling:
         """Response is always 200 — email failures are handled inside the background task."""
         with patch("app.api.v1.routes.auth._process_password_reset", new_callable=AsyncMock):
             response = await client.post(ENDPOINT, json={"email": "user@example.com"})
-
         assert response.status_code == 200
 
     async def test_forgot_password_returns_200_when_database_fails(
