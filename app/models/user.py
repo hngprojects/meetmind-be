@@ -21,15 +21,17 @@ class User(Base, UUIDPrimaryKey, TimestampMixin):
     role: Mapped[str | None] = mapped_column(String(60))
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
 
-class RefreshToken(Base, UUIDPrimaryKey,TimestampMixin):
+
+class RefreshToken(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "refresh_tokens"
- 
+
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     token_hash: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked: Mapped[bool | None] = mapped_column(Boolean, default=False)
+
 
 class SSOProvider(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "sso_providers"
@@ -104,12 +106,8 @@ class UserPrivacySettings(Base, UUIDPrimaryKey, TimestampMixin):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
-    require_approval_before_sharing: Mapped[bool | None] = mapped_column(
-        Boolean, default=True
-    )
-    hide_private_manager_notes: Mapped[bool | None] = mapped_column(
-        Boolean, default=True
-    )
+    require_approval_before_sharing: Mapped[bool | None] = mapped_column(Boolean, default=True)
+    hide_private_manager_notes: Mapped[bool | None] = mapped_column(Boolean, default=True)
 
 
 class UserSecuritySettings(Base, UUIDPrimaryKey, TimestampMixin):

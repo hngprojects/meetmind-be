@@ -116,9 +116,7 @@ class VerificationService:
         """
         token_hash = _hash_token(token)
         result = await db.execute(
-            select(EmailVerificationToken).where(
-                EmailVerificationToken.token_hash == token_hash
-            )
+            select(EmailVerificationToken).where(EmailVerificationToken.token_hash == token_hash)
         )
         record = result.scalar_one_or_none()
 

@@ -10,9 +10,7 @@ from app.models.base import Base, TimestampMixin, UUIDPrimaryKey
 
 class UserPlatformIntegration(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "user_platform_integrations"
-    __table_args__ = (
-        UniqueConstraint("user_id", "platform"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "platform"),)
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
@@ -25,9 +23,7 @@ class UserPlatformIntegration(Base, UUIDPrimaryKey, TimestampMixin):
 
 class Integration(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "integrations"
-    __table_args__ = (
-        UniqueConstraint("workspace_id", "provider"),
-    )
+    __table_args__ = (UniqueConstraint("workspace_id", "provider"),)
 
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False
@@ -73,8 +69,6 @@ class IntegrationSettings(Base, UUIDPrimaryKey, TimestampMixin):
 class WaitlistSignup(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "waitlist_signups"
 
-    user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id")
-    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     provider: Mapped[str] = mapped_column(String(30), nullable=False)
     notified_at: Mapped[datetime | None] = mapped_column(DateTime)

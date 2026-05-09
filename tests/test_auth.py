@@ -9,6 +9,7 @@ from app.models.user import User
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def make_user(**kwargs) -> User:
     user = MagicMock(spec=User)
     user.id = kwargs.get("id", uuid4())
@@ -27,11 +28,11 @@ VALID_PAYLOAD = {
 SIGNUP_URL = "/api/v1/auth/signup"
 
 
-CREATE_USER    = "app.services.auth.AuthService.create_user"
-CREATE_ACCESS  = "app.services.auth.AuthService.create_access_token"
+CREATE_USER = "app.services.auth.AuthService.create_user"
+CREATE_ACCESS = "app.services.auth.AuthService.create_access_token"
 CREATE_REFRESH = "app.services.auth.AuthService.create_refresh_token"
 
-FAKE_ACCESS  = "fake.access.token"
+FAKE_ACCESS = "fake.access.token"
 FAKE_REFRESH = "fake.refresh.token"
 FAKE_REFRESH_EXPIRES = datetime.now(timezone.utc) + timedelta(days=7)
 FAKE_REFRESH_TUPLE = (FAKE_REFRESH, FAKE_REFRESH_EXPIRES)
@@ -39,13 +40,16 @@ FAKE_REFRESH_TUPLE = (FAKE_REFRESH, FAKE_REFRESH_EXPIRES)
 
 # ── Success ───────────────────────────────────────────────────────────────────
 
+
 class TestSignupSuccess:
     @pytest.mark.anyio
     async def test_response_body_shape(self, client):
         user = make_user()
-        with patch(CREATE_USER, new_callable=AsyncMock, return_value=user), \
-             patch(CREATE_ACCESS, new_callable=AsyncMock, return_value=FAKE_ACCESS), \
-             patch(CREATE_REFRESH, new_callable=AsyncMock, return_value=FAKE_REFRESH_TUPLE):
+        with (
+            patch(CREATE_USER, new_callable=AsyncMock, return_value=user),
+            patch(CREATE_ACCESS, new_callable=AsyncMock, return_value=FAKE_ACCESS),
+            patch(CREATE_REFRESH, new_callable=AsyncMock, return_value=FAKE_REFRESH_TUPLE),
+        ):
             response = await client.post(SIGNUP_URL, json=VALID_PAYLOAD)
         body = response.json()
         data = body["data"]
@@ -64,6 +68,7 @@ class TestSignupSuccess:
 
 # ── Duplicate email ────────────────────────────────────────────────────────────
 
+
 class TestSignupDuplicateEmail:
     @pytest.mark.anyio
     async def test_returns_400_when_email_already_registered(self, client):
@@ -73,8 +78,8 @@ class TestSignupDuplicateEmail:
         assert response.status_code == 400
 
 
-
 # ── Server error ──────────────────────────────────────────────────────────────
+
 
 class TestSignupServerError:
     @pytest.mark.anyio
@@ -86,6 +91,7 @@ class TestSignupServerError:
 
 # ── Input validation – name ────────────────────────────────────────────────────
 
+
 class TestSignupNameValidation:
     @pytest.mark.anyio
     async def test_missing_name_returns_422(self, client):
@@ -93,7 +99,9 @@ class TestSignupNameValidation:
         response = await client.post(SIGNUP_URL, json=payload)
         assert response.status_code == 422
 
+
 # ── Input validation – email ───────────────────────────────────────────────────
+
 
 class TestSignupEmailValidation:
     @pytest.mark.anyio
@@ -109,6 +117,7 @@ class TestSignupEmailValidation:
 
 
 # ── Input validation – password ────────────────────────────────────────────────
+
 
 class TestSignupPasswordValidation:
     @pytest.mark.anyio
@@ -140,9 +149,10 @@ class TestSignupPasswordValidation:
     @pytest.mark.anyio
     async def test_password_at_min_length_is_accepted(self, client):
         user = make_user()
-        with patch(CREATE_USER, new_callable=AsyncMock, return_value=user), \
-             patch(CREATE_ACCESS, new_callable=AsyncMock, return_value=FAKE_ACCESS), \
-             patch(CREATE_REFRESH, new_callable=AsyncMock, return_value=FAKE_REFRESH_TUPLE):
+        with (
+            patch(CREATE_USER, new_callable=AsyncMock, return_value=user),
+            patch(CREATE_ACCESS, new_callable=AsyncMock, return_value=FAKE_ACCESS),
+            patch(CREATE_REFRESH, new_callable=AsyncMock, return_value=FAKE_REFRESH_TUPLE),
+        ):
             response = await client.post(SIGNUP_URL, json={**VALID_PAYLOAD, "password": "Secure1!"})
         assert response.status_code == 201
-

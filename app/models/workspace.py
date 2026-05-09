@@ -13,16 +13,12 @@ class Workspace(Base, UUIDPrimaryKey, TimestampMixin):
 
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     slug: Mapped[str | None] = mapped_column(String(80), unique=True)
-    created_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id")
-    )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
 
 class WorkspaceMember(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "workspace_members"
-    __table_args__ = (
-        UniqueConstraint("workspace_id", "user_id"),
-    )
+    __table_args__ = (UniqueConstraint("workspace_id", "user_id"),)
 
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False
@@ -31,9 +27,7 @@ class WorkspaceMember(Base, UUIDPrimaryKey, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     role: Mapped[str | None] = mapped_column(String(30))
-    joined_at: Mapped[datetime | None] = mapped_column(
-        DateTime, server_default=func.now()
-    )
+    joined_at: Mapped[datetime | None] = mapped_column(DateTime, server_default=func.now())
 
 
 class WorkspaceInvite(Base, UUIDPrimaryKey, TimestampMixin):
@@ -42,9 +36,7 @@ class WorkspaceInvite(Base, UUIDPrimaryKey, TimestampMixin):
     workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workspaces.id"), nullable=False
     )
-    invited_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id")
-    )
+    invited_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str | None] = mapped_column(String(20), default="pending")
     expires_at: Mapped[datetime | None] = mapped_column(DateTime)

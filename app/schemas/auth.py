@@ -71,9 +71,7 @@ class SignupRequest(BaseModel):
 
     name: str = Field(..., max_length=120, description="User's full name")
     email: EmailStr = Field(..., max_length=255, description="User's email address")
-    password: str = Field(
-        ..., min_length=8, max_length=255, description="User's password"
-    )
+    password: str = Field(..., min_length=8, max_length=255, description="User's password")
 
     @field_validator("name")
     @classmethod

@@ -13,9 +13,7 @@ class AskMindSession(Base, UUIDPrimaryKey, TimestampMixin):
     meeting_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("meetings.id"), nullable=False
     )
-    user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id")
-    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
 
 
 class AskMindMessage(Base, UUIDPrimaryKey, TimestampMixin):

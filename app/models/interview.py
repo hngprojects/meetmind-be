@@ -64,9 +64,7 @@ class InterviewTranscript(Base, UUIDPrimaryKey, TimestampMixin):
 
 class InterviewTranscriptTurn(Base, UUIDPrimaryKey, TimestampMixin):
     __tablename__ = "interview_transcript_turns"
-    __table_args__ = (
-        Index("ix_interview_turns_transcript_seq", "transcript_id", "sequence_no"),
-    )
+    __table_args__ = (Index("ix_interview_turns_transcript_seq", "transcript_id", "sequence_no"),)
 
     transcript_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("interview_transcripts.id"), nullable=False

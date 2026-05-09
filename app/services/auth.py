@@ -142,9 +142,7 @@ class AuthService:
             "iat": _now(),
             "type": "access",
         }
-        return jwt.encode(
-            payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
-        )
+        return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
     @staticmethod
     async def decode_access_token(token: str) -> dict:
@@ -159,9 +157,7 @@ class AuthService:
         Raises:
             jose.JWTError: If the token signature or claims are invalid.
         """
-        return jwt.decode(
-            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
-        )
+        return jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
 
     @staticmethod
     async def create_refresh_token(
@@ -189,18 +185,22 @@ class AuthService:
         now = _now()
         expires_at = now + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
 
-        db.add(RefreshToken(
-            user_id=user_id,
-            token_hash=token_hash,
-            expires_at=expires_at,
-        ))
-        db.add(ActiveSession(
-            user_id=user_id,
-            refresh_token_hash=token_hash,
-            ip_address=ip_address,
-            device_hint=device_hint,
-            last_seen_at=now,
-        ))
+        db.add(
+            RefreshToken(
+                user_id=user_id,
+                token_hash=token_hash,
+                expires_at=expires_at,
+            )
+        )
+        db.add(
+            ActiveSession(
+                user_id=user_id,
+                refresh_token_hash=token_hash,
+                ip_address=ip_address,
+                device_hint=device_hint,
+                last_seen_at=now,
+            )
+        )
         await db.commit()
         return raw, expires_at
 
@@ -374,9 +374,7 @@ class AuthService:
                 enumeration of which check failed.
         """
         token_hash = _hash_token(raw_token)
-        result = await db.execute(
-            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
-        )
+        result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
         rt = result.scalar_one_or_none()
 
         _unauthorized = APIError(
@@ -417,12 +415,14 @@ class AuthService:
             if ip_address:
                 active_session.ip_address = ip_address
         else:
-            db.add(ActiveSession(
-                user_id=rt.user_id,
-                refresh_token_hash=new_hash,
-                ip_address=ip_address,
-                last_seen_at=now,
-            ))
+            db.add(
+                ActiveSession(
+                    user_id=rt.user_id,
+                    refresh_token_hash=new_hash,
+                    ip_address=ip_address,
+                    last_seen_at=now,
+                )
+            )
 
         await db.commit()
 
@@ -449,9 +449,7 @@ class AuthService:
             APIError: 401 if the token is not found.
         """
         token_hash = _hash_token(raw_token)
-        result = await db.execute(
-            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
-        )
+        result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
         rt = result.scalar_one_or_none()
 
         if not rt:

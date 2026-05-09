@@ -178,9 +178,7 @@ def paginated(
     """
     total_pages = math.ceil(total / page_size) if page_size else 0
     meta = ResponseMeta(
-        pagination=PageMeta(
-            page=page, page_size=page_size, total=total, total_pages=total_pages
-        )
+        pagination=PageMeta(page=page, page_size=page_size, total=total, total_pages=total_pages)
     )
     return success(items, message=message, meta=meta)
 
