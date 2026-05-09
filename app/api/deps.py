@@ -55,6 +55,15 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             code="unauthorized",
         )
+    # ── Blacklist check ────────────────────────────────────────────────
+    jti = payload.get("jti")
+    if not jti or await AuthService.is_token_blacklisted(db, jti):
+        raise APIError(
+            "Token has been revoked",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            code="token_revoked",
+        )
+    # ──────
 
     raw_id: str | None = payload.get("sub")
     if not raw_id:

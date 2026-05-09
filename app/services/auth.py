@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from turtle import rt
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -13,6 +14,7 @@ from jose import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.token_blacklist import TokenBlacklist
 from app.core.config import settings
 from app.core.exceptions import UserAlreadyExistsException
 from app.core.responses import APIError
@@ -141,6 +143,7 @@ class AuthService:
             "exp": expire,
             "iat": _now(),
             "type": "access",
+            "jti": str(uuid.uuid4()),
         }
         return jwt.encode(
             payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
@@ -162,6 +165,37 @@ class AuthService:
         return jwt.decode(
             token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
         )
+    
+    @staticmethod
+    async def blacklist_token(
+        db: AsyncSession,
+        token_id: str,
+        token_type: str,
+        expires_at: datetime,
+    ) -> None:
+        """Add a token identifier to the blacklist. No-ops if already present."""
+        existing = await db.execute(
+            select(TokenBlacklist).where(TokenBlacklist.token_id == token_id)
+        )
+        if existing.scalar_one_or_none() is not None:
+            return  # already blacklisted — double logout, safe to ignore
+        db.add(TokenBlacklist(
+            token_id=token_id,
+            token_type=token_type,
+            expires_at=expires_at,
+        ))
+
+    @staticmethod
+    async def is_token_blacklisted(db: AsyncSession, token_id: str) -> bool:
+        """Return ``True`` if the token ID exists in the blacklist.
+
+        Args:
+            token_id: ``jti`` (access) or SHA-256 hash (refresh) to check.
+        """
+        result = await db.execute(
+            select(TokenBlacklist).where(TokenBlacklist.token_id == token_id)
+        )
+        return result.scalar_one_or_none() is not None
 
     @staticmethod
     async def create_refresh_token(
@@ -438,33 +472,69 @@ class AuthService:
         }
 
     @staticmethod
-    async def logout(raw_token: str, db: AsyncSession) -> None:
-        """Revoke a refresh token and remove the active session.
+    async def logout(
+        raw_refresh_token: str,
+        db: AsyncSession,
+        raw_access_token: str | None = None,
+        access_token_payload: dict | None = None,
+    ) -> None:
+        """Revoke a refresh token, blacklist both tokens, remove the active session.
 
         Args:
-            raw_token: The raw refresh token string from the client.
+            raw_refresh_token: The raw refresh token string from the client.
             db: Active async database session.
+            raw_access_token: Raw access token string (used only to derive expiry
+                for the blacklist row — never stored).
+            access_token_payload: Already-decoded JWT payload, passed from the
+                route so we don't decode twice. Must contain ``jti`` and ``exp``.
 
         Raises:
-            APIError: 401 if the token is not found.
+            APIError: 401 if the refresh token is not found.
         """
-        token_hash = _hash_token(raw_token)
+        refresh_hash = _hash_token(raw_refresh_token)
+
         result = await db.execute(
-            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+            select(RefreshToken).where(RefreshToken.token_hash == refresh_hash)
         )
         rt = result.scalar_one_or_none()
 
-        if not rt:
+        refresh_expires = rt.expires_at if rt else None
+
+        if refresh_expires and refresh_expires.tzinfo is None:
+            refresh_expires = refresh_expires.replace(tzinfo=timezone.utc)
+
+        if (
+            not rt
+            or rt.revoked
+            or not refresh_expires
+            or refresh_expires < _now()
+        ):
             raise APIError(
-                "Invalid refresh token",
+                "Invalid or expired refresh token",
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 code="invalid_refresh_token",
             )
 
+        # Revoke the refresh token row (existing behaviour).
         rt.revoked = True
 
+        # Blacklist the refresh token by its hash.
+        refresh_expires = rt.expires_at
+        if refresh_expires.tzinfo is None:
+            refresh_expires = refresh_expires.replace(tzinfo=timezone.utc)
+        await AuthService.blacklist_token(db, refresh_hash, "refresh", refresh_expires)
+
+        # Blacklist the access token by its jti, if provided.
+        if access_token_payload:
+            jti = access_token_payload.get("jti")
+            exp = access_token_payload.get("exp")
+            if jti and exp:
+                access_expires = datetime.fromtimestamp(exp, tz=timezone.utc)
+                await AuthService.blacklist_token(db, jti, "access", access_expires)
+
+        # Remove the active session.
         session_result = await db.execute(
-            select(ActiveSession).where(ActiveSession.refresh_token_hash == token_hash)
+            select(ActiveSession).where(ActiveSession.refresh_token_hash == refresh_hash)
         )
         active_session = session_result.scalar_one_or_none()
         if active_session:

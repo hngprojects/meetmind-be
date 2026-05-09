@@ -20,7 +20,7 @@ def anyio_backend():
 
 
 def mock_get_session():
-    """Yield a mock DB session so no real database interactions are avoided during tests."""
+    """Yield a mock DB session so no real database interactions happen during tests."""
     session = MagicMock()
     session.add = MagicMock()
     session.commit = AsyncMock()
@@ -31,8 +31,7 @@ def mock_get_session():
 # Force test DB
 TEST_DATABASE_URL = "sqlite+aiosqlite://"
 
-
-#Use StaticPool
+# Use StaticPool so all connections share the same in-memory database
 engine = create_async_engine(
     TEST_DATABASE_URL,
     connect_args={"check_same_thread": False},
@@ -46,10 +45,11 @@ TestingSessionLocal = async_sessionmaker(
 )
 
 
-#Create tables ONCE using SAME connection
+# Create tables ONCE using SAME connection
 @pytest.fixture(scope="session", autouse=True)
 async def create_tables():
     from app.models import email_verification, user  # noqa: F401
+    from app.models import token_blacklist             # noqa: F401  ← required for blacklist tests
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -81,6 +81,14 @@ def mock_send_verification_email():
     with patch("app.services.verification_service.send_verification_email", _noop):
         yield
 
+@pytest.fixture(autouse=True)
+def disable_rate_limiter():
+    """Disable SlowAPI rate limiting during tests."""
+    from app.main import app
+
+    app.state.limiter.enabled = False
+    yield
+    app.state.limiter.enabled = True
 
 # HTTP client
 @pytest.fixture

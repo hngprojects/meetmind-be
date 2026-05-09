@@ -4,6 +4,7 @@ import logging
 import secrets
 from datetime import timedelta, timezone, datetime
 
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
@@ -25,6 +26,7 @@ from app.services.verification_service import VerificationService
 router = APIRouter()
 logger = logging.getLogger(__name__)
 verification_service = VerificationService()
+_bearer = HTTPBearer(auto_error=False)
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
@@ -387,6 +389,8 @@ async def logout(
     payload: RefreshTokenRequest,
     response: Response,
     db: AsyncSession = Depends(get_session),
+    access_token: str | None = Cookie(default=None),
+    bearer_creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ):
     """Revoke a refresh token and clear auth cookies.
 
@@ -401,7 +405,21 @@ async def logout(
     Raises:
         APIError: ``invalid_refresh_token`` if the token is not found.
     """
-    await AuthService.logout(payload.refresh_token, db)
+    # Decode the access token for its jti — best-effort, so we don't block logout
+    # if it's already expired or missing.
+    access_payload: dict | None = None
+    raw_access = access_token or (bearer_creds.credentials if bearer_creds else None)
+    if raw_access:
+        try:
+            access_payload = await AuthService.decode_access_token(raw_access)
+        except Exception:
+            pass  # expired or invalid — jti blacklisting is skipped, which is fine
+
+    await AuthService.logout(
+        raw_refresh_token=payload.refresh_token,
+        db=db,
+        access_token_payload=access_payload,
+    )
 
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
