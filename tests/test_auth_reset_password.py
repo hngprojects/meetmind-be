@@ -72,14 +72,14 @@ class TestResetPasswordSuccess:
 
         response = await client.post(
             RESET_URL,
-            json={"token": "good-token-1", "new_password": "NewSecure1"},
+            json={"token": "good-token-1", "password": "NewSecure1"},
         )
 
         assert response.status_code == 200
         body = response.json()
         assert body["success"] is True
-        assert body["message"] == "Password reset successfully"
-        assert body["data"] is None
+        assert body["message"] == "Password reset successfully. You can now sign in with your new password."
+        assert body["data"] == {"next_step": "login"}
 
     async def test_token_cannot_be_reused_after_successful_reset(
         self, client: AsyncClient, db_session: AsyncSession
@@ -90,13 +90,13 @@ class TestResetPasswordSuccess:
 
         first = await client.post(
             RESET_URL,
-            json={"token": "one-time-token-1", "new_password": "NewSecure1"},
+            json={"token": "one-time-token-1", "password": "NewSecure1"},
         )
         assert first.status_code == 200
 
         second = await client.post(
             RESET_URL,
-            json={"token": "one-time-token-1", "new_password": "AnotherPass2"},
+            json={"token": "one-time-token-1", "password": "AnotherPass2"},
         )
         assert second.status_code == 400
 
@@ -109,7 +109,7 @@ class TestResetPasswordTokenFailures:
         """A token that has no DB record must return 400."""
         response = await client.post(
             RESET_URL,
-            json={"token": "does-not-exist-anywhere", "new_password": "NewSecure1"},
+            json={"token": "does-not-exist-anywhere", "password": "NewSecure1"},
         )
         assert response.status_code == 400
 
@@ -127,7 +127,7 @@ class TestResetPasswordTokenFailures:
 
         response = await client.post(
             RESET_URL,
-            json={"token": "expired-token-1", "new_password": "NewSecure1"},
+            json={"token": "expired-token-1", "password": "NewSecure1"},
         )
         assert response.status_code == 400
 
@@ -142,7 +142,7 @@ class TestResetPasswordTokenFailures:
 
         response = await client.post(
             RESET_URL,
-            json={"token": "used-token-1", "new_password": "NewSecure1"},
+            json={"token": "used-token-1", "password": "NewSecure1"},
         )
         assert response.status_code == 400
 
@@ -164,15 +164,15 @@ class TestResetPasswordTokenFailures:
 
         r_nonexistent = await client.post(
             RESET_URL,
-            json={"token": "totally-fake-unique", "new_password": "NewSecure1"},
+            json={"token": "totally-fake-unique", "password": "NewSecure1"},
         )
         r_used = await client.post(
             RESET_URL,
-            json={"token": "used-t-unique", "new_password": "NewSecure1"},
+            json={"token": "used-t-unique", "password": "NewSecure1"},
         )
         r_expired = await client.post(
             RESET_URL,
-            json={"token": "exp-t-unique", "new_password": "NewSecure1"},
+            json={"token": "exp-t-unique", "password": "NewSecure1"},
         )
 
         assert r_nonexistent.json()["message"] == r_used.json()["message"] == r_expired.json()["message"]
@@ -184,30 +184,30 @@ class TestResetPasswordValidation:
 
     async def test_returns_422_when_token_is_empty(self, client: AsyncClient):
         response = await client.post(
-            RESET_URL, json={"token": "", "new_password": "NewSecure1"}
+            RESET_URL, json={"token": "", "password": "NewSecure1"}
         )
         assert response.status_code == 422
 
     async def test_returns_422_when_password_too_short(self, client: AsyncClient):
         response = await client.post(
-            RESET_URL, json={"token": "some-token", "new_password": "Ab1"}
+            RESET_URL, json={"token": "some-token", "password": "Ab1"}
         )
         assert response.status_code == 422
 
     async def test_returns_422_when_password_has_no_uppercase(self, client: AsyncClient):
         response = await client.post(
-            RESET_URL, json={"token": "some-token", "new_password": "allowercase1"}
+            RESET_URL, json={"token": "some-token", "password": "allowercase1"}
         )
         assert response.status_code == 422
 
     async def test_returns_422_when_password_has_no_lowercase(self, client: AsyncClient):
         response = await client.post(
-            RESET_URL, json={"token": "some-token", "new_password": "NOLOWERCASE1"}
+            RESET_URL, json={"token": "some-token", "password": "NOLOWERCASE1"}
         )
         assert response.status_code == 422
 
     async def test_returns_422_when_password_has_no_digit(self, client: AsyncClient):
         response = await client.post(
-            RESET_URL, json={"token": "some-token", "new_password": "NoNumbersHere"}
+            RESET_URL, json={"token": "some-token", "password": "NoNumbersHere"}
         )
         assert response.status_code == 422
