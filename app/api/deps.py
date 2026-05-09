@@ -23,7 +23,7 @@ _bearer = HTTPBearer(auto_error=False)
 
 async def get_current_user(
     db: DBSession,
-    access_token: str | None = Cookie(default=None),
+    access_token: Annotated[str | None, Cookie(include_in_schema=False)] = None,
     bearer_creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> User:
     """Resolve the authenticated user from a JWT access token.
