@@ -86,9 +86,10 @@ def disable_rate_limiter():
     """Disable SlowAPI rate limiting during tests."""
     from app.main import app
 
+    orig_enabled = getattr(app.state.limiter, "enabled", True)
     app.state.limiter.enabled = False
     yield
-    app.state.limiter.enabled = True
+    app.state.limiter.enabled = orig_enabled
 
 # HTTP client
 @pytest.fixture

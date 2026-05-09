@@ -4,7 +4,9 @@ import logging
 import secrets
 from datetime import timedelta, timezone, datetime
 
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials
+from jose import JWTError
+from app.api.deps import _bearer
 from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
@@ -26,7 +28,6 @@ from app.services.verification_service import VerificationService
 router = APIRouter()
 logger = logging.getLogger(__name__)
 verification_service = VerificationService()
-_bearer = HTTPBearer(auto_error=False)
 
 
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
@@ -406,13 +407,13 @@ async def logout(
         APIError: ``invalid_refresh_token`` if the token is not found.
     """
     # Decode the access token for its jti — best-effort, so we don't block logout
-    # if it's already expired or missing.
+    # if it's already expired or missing. Only catch token-related failures.
     access_payload: dict | None = None
-    raw_access = access_token or (bearer_creds.credentials if bearer_creds else None)
-    if raw_access:
+    raw = access_token or (bearer_creds.credentials if bearer_creds else None)
+    if raw:
         try:
-            access_payload = await AuthService.decode_access_token(raw_access)
-        except Exception:
+            access_payload = await AuthService.decode_access_token(raw)
+        except JWTError:
             pass  # expired or invalid — jti blacklisting is skipped, which is fine
 
     await AuthService.logout(

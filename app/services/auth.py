@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from turtle import rt
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -12,6 +11,7 @@ import bcrypt
 from fastapi import status
 from jose import jwt
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.token_blacklist import TokenBlacklist
@@ -174,16 +174,14 @@ class AuthService:
         expires_at: datetime,
     ) -> None:
         """Add a token identifier to the blacklist. No-ops if already present."""
-        existing = await db.execute(
-            select(TokenBlacklist).where(TokenBlacklist.token_id == token_id)
-        )
-        if existing.scalar_one_or_none() is not None:
-            return  # already blacklisted — double logout, safe to ignore
-        db.add(TokenBlacklist(
+        # Use a Postgres INSERT ... ON CONFLICT DO NOTHING to avoid a
+        # race between concurrent blacklisting attempts.
+        stmt = pg_insert(TokenBlacklist.__table__).values(
             token_id=token_id,
             token_type=token_type,
             expires_at=expires_at,
-        ))
+        ).on_conflict_do_nothing(index_elements=["token_id"])
+        await db.execute(stmt)
 
     @staticmethod
     async def is_token_blacklisted(db: AsyncSession, token_id: str) -> bool:
@@ -416,7 +414,7 @@ class AuthService:
         _unauthorized = APIError(
             "Invalid or expired refresh token",
             status_code=status.HTTP_401_UNAUTHORIZED,
-            code="unauthorized",
+            code="invalid_refresh_token",
         )
 
         expires_at = rt.expires_at if rt else None
@@ -475,7 +473,6 @@ class AuthService:
     async def logout(
         raw_refresh_token: str,
         db: AsyncSession,
-        raw_access_token: str | None = None,
         access_token_payload: dict | None = None,
     ) -> None:
         """Revoke a refresh token, blacklist both tokens, remove the active session.
@@ -483,8 +480,6 @@ class AuthService:
         Args:
             raw_refresh_token: The raw refresh token string from the client.
             db: Active async database session.
-            raw_access_token: Raw access token string (used only to derive expiry
-                for the blacklist row — never stored).
             access_token_payload: Already-decoded JWT payload, passed from the
                 route so we don't decode twice. Must contain ``jti`` and ``exp``.
 
@@ -518,10 +513,8 @@ class AuthService:
         # Revoke the refresh token row (existing behaviour).
         rt.revoked = True
 
-        # Blacklist the refresh token by its hash.
-        refresh_expires = rt.expires_at
-        if refresh_expires.tzinfo is None:
-            refresh_expires = refresh_expires.replace(tzinfo=timezone.utc)
+        # Blacklist the refresh token by its hash using the normalized
+        # `refresh_expires` computed above.
         await AuthService.blacklist_token(db, refresh_hash, "refresh", refresh_expires)
 
         # Blacklist the access token by its jti, if provided.

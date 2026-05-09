@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,7 +19,7 @@ class User(Base, UUIDPrimaryKey, TimestampMixin):
     job_title: Mapped[str | None] = mapped_column(String(80))
     company: Mapped[str | None] = mapped_column(String(120))
     role: Mapped[str | None] = mapped_column(String(60))
-    is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default=text("false"),)
 
 class RefreshToken(Base, UUIDPrimaryKey,TimestampMixin):
     __tablename__ = "refresh_tokens"

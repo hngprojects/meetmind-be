@@ -152,6 +152,9 @@ class TestTokenBlacklistingOnLogout:
             f"Expected 401 when reusing a revoked refresh token but got "
             f"{response.status_code}. Body: {body}"
         )
+        assert body.get("error", {}).get("code") == "invalid_refresh_token", (
+            f"Expected error code 'invalid_refresh_token' but got '{body.get('error')}'. Full body: {body}"
+        )
         print("  [result]  Refresh token correctly rejected after logout  ✓")
 
     # ------------------------------------------------------------------
@@ -188,6 +191,9 @@ class TestTokenBlacklistingOnLogout:
 
         assert second.status_code == 401, (
             f"Expected 401 on double-logout but got {second.status_code}. Body: {body}"
+        )
+        assert body.get("error", {}).get("code") == "invalid_refresh_token", (
+            f"Expected error code 'invalid_refresh_token' on double logout but got '{body.get('error')}'. Full body: {body}"
         )
         print("  [result]        Double logout correctly rejected with 401  ✓")
 
@@ -268,6 +274,9 @@ class TestTokenBlacklistingOnLogout:
         assert refresh_resp.status_code == 401, (
             f"Expected 401 when reusing refresh token after logout-without-Bearer, "
             f"got {refresh_resp.status_code}. Body: {body}"
+        )
+        assert body.get("error", {}).get("code") == "invalid_refresh_token", (
+            f"Expected error code 'invalid_refresh_token' but got '{body.get('error')}'. Full body: {body}"
         )
         print(
             "  [result]             Refresh token revoked even without "

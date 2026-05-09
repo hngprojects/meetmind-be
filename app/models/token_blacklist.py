@@ -36,7 +36,8 @@ class TokenBlacklist(Base, UUIDPrimaryKey):
 
     __table_args__ = (
         # Hot path: existence check on every authenticated request.
-        Index("ix_token_blacklist_token_id", "token_id"),
+        # `token_id` is declared unique on the column which creates the
+        # underlying unique index; avoid declaring a duplicate index here.
         # Cleanup path: DELETE FROM token_blacklist WHERE expires_at < now()
         Index("ix_token_blacklist_expires_at", "expires_at"),
     )
