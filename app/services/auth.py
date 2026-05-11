@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -10,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 from fastapi import status
 from jose import jwt
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -18,6 +19,7 @@ from app.core.exceptions import UserAlreadyExistsException
 from app.core.responses import APIError
 from app.models.user import ActiveSession, PasswordResetToken, RefreshToken, User
 from app.schemas.auth import SignupRequest
+from app.services.email_service import send_password_reset_security_alert
 
 # Pre-computed once at import time. Used to run a constant-time bcrypt check
 # when no account matches the submitted email, preventing timing-based
@@ -25,6 +27,7 @@ from app.schemas.auth import SignupRequest
 _DUMMY_HASH: str = bcrypt.hashpw(b"__dummy__", bcrypt.gensalt()).decode()
 
 RESET_TOKEN_EXPIRY_MINUTES = 60
+logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -46,6 +49,15 @@ def _hash_token(raw: str) -> str:
         Hex-encoded SHA-256 digest suitable for database lookup.
     """
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _generate_jti() -> str:
+    """Return a cryptographically random JWT ID (``jti``) string.
+
+    Returns:
+        A URL-safe, base64-encoded random string of 16 bytes.
+    """
+    return secrets.token_urlsafe(16)
 
 
 class AuthService:
@@ -133,13 +145,15 @@ class AuthService:
         Returns:
             The encoded JWT as a compact serialization string.
         """
-        expire = _now() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        now = _now()
+        expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         payload = {
             "sub": str(user.id),
             "name": user.name,
             "email": user.email,
             "exp": expire,
-            "iat": _now(),
+            "iat": now,
+            "jti": _generate_jti(),
             "type": "access",
         }
         return jwt.encode(
@@ -189,18 +203,22 @@ class AuthService:
         now = _now()
         expires_at = now + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
 
-        db.add(RefreshToken(
-            user_id=user_id,
-            token_hash=token_hash,
-            expires_at=expires_at,
-        ))
-        db.add(ActiveSession(
-            user_id=user_id,
-            refresh_token_hash=token_hash,
-            ip_address=ip_address,
-            device_hint=device_hint,
-            last_seen_at=now,
-        ))
+        db.add(
+            RefreshToken(
+                user_id=user_id,
+                token_hash=token_hash,
+                expires_at=expires_at,
+            )
+        )
+        db.add(
+            ActiveSession(
+                user_id=user_id,
+                refresh_token_hash=token_hash,
+                ip_address=ip_address,
+                device_hint=device_hint,
+                last_seen_at=now,
+            )
+        )
         await db.commit()
         return raw, expires_at
 
@@ -227,7 +245,9 @@ class AuthService:
 
         # Always run bcrypt — even when the user doesn't exist — so the
         # response time is indistinguishable between wrong-email and wrong-password.
-        stored_hash = user.password_hash if (user and user.password_hash) else _DUMMY_HASH
+        stored_hash = (
+            user.password_hash if (user and user.password_hash) else _DUMMY_HASH
+        )
         password_ok = await AuthService.verify_password(password, stored_hash)
 
         if not user or not user.password_hash or not password_ok:
@@ -277,7 +297,12 @@ class AuthService:
         return raw
 
     @staticmethod
-    async def reset_password(raw_token: str, new_password: str, db: AsyncSession) -> None:
+    async def reset_password(
+        raw_token: str,
+        new_password: str,
+        db: AsyncSession,
+        background_tasks=None,
+    ) -> None:
         """Validate a password reset token and update the user's password.
 
         Token validation (exists, not used, not expired) and the password +
@@ -297,11 +322,13 @@ class AuthService:
         """
         token_hash = _hash_token(raw_token)
         result = await db.execute(
-            select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
+            select(PasswordResetToken).where(
+                PasswordResetToken.token_hash == token_hash
+            )
         )
         rt = result.scalar_one_or_none()
 
-        # Single generic error for all failure modes — no signal about which check failed
+        # Single generic error for all failure modes
         _invalid = APIError(
             "This reset link is invalid or has expired.",
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -327,7 +354,30 @@ class AuthService:
         # Write both changes in one commit — if the commit fails, both roll back
         user.password_hash = await AuthService.hash_password(new_password)
         rt.used_at = _now()
+
+        # after a successful password reset, revoke every active session
+        await db.execute(
+            update(RefreshToken)
+            .where(
+                RefreshToken.user_id == user.id,
+                RefreshToken.revoked.is_(False),
+            )
+            .values(revoked=True)
+        )
+
+        # Remove all active sessions for this user in a single statement
+        await db.execute(delete(ActiveSession).where(ActiveSession.user_id == user.id))
+
         await db.commit()
+        try:
+            await send_password_reset_security_alert(
+                user.email, user.name, background_tasks=background_tasks
+            )
+        except Exception:
+            logger.exception(
+                "Failed to send password reset security alert for user %s",
+                user.id,
+            )
 
     @staticmethod
     def get_next_step(user: User) -> str:
@@ -403,7 +453,11 @@ class AuthService:
         now = _now()
         new_expires_at = now + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
 
-        db.add(RefreshToken(user_id=rt.user_id, token_hash=new_hash, expires_at=new_expires_at))
+        db.add(
+            RefreshToken(
+                user_id=rt.user_id, token_hash=new_hash, expires_at=new_expires_at
+            )
+        )
         rt.revoked = True
 
         # Update the active session to track the new token
@@ -417,17 +471,20 @@ class AuthService:
             if ip_address:
                 active_session.ip_address = ip_address
         else:
-            db.add(ActiveSession(
-                user_id=rt.user_id,
-                refresh_token_hash=new_hash,
-                ip_address=ip_address,
-                last_seen_at=now,
-            ))
+            db.add(
+                ActiveSession(
+                    user_id=rt.user_id,
+                    refresh_token_hash=new_hash,
+                    ip_address=ip_address,
+                    last_seen_at=now,
+                )
+            )
 
         await db.commit()
 
         access_token = await AuthService.create_access_token(user)
-        access_expires_at = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expiry_minutes = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_expires_at = now + expiry_minutes
 
         return {
             "access_token": access_token,
@@ -471,3 +528,31 @@ class AuthService:
             await db.delete(active_session)
 
         await db.commit()
+
+    @staticmethod
+    async def blacklist_access_token_raw(token: str) -> None:
+        """Blacklist an access token by its raw JWT string.
+
+        Decodes the ``jti`` and ``exp`` claims and stores the ``jti`` in
+        Redis with a TTL equal to the remaining token lifetime.
+
+        Args:
+            token: The raw JWT access token string.
+        """
+        from app.core.redis import blacklist_token
+
+        try:
+            payload = jwt.decode(
+                token,
+                settings.JWT_SECRET,
+                algorithms=[settings.JWT_ALGORITHM],
+                options={"verify_exp": False},
+            )
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if not jti or not exp:
+                return
+            remaining = int(exp) - int(_now().timestamp())
+            await blacklist_token(jti, remaining)
+        except Exception:
+            logger.debug("Could not blacklist access token on logout")

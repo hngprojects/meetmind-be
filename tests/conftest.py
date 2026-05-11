@@ -20,7 +20,7 @@ def anyio_backend():
 
 
 def mock_get_session():
-    """Yield a mock DB session so no real database interactions are avoided during tests."""
+    """Yield a mock DB session so database interactions are avoided during tests."""
     session = MagicMock()
     session.add = MagicMock()
     session.commit = AsyncMock()
@@ -32,7 +32,7 @@ def mock_get_session():
 TEST_DATABASE_URL = "sqlite+aiosqlite://"
 
 
-#Use StaticPool
+# Use StaticPool
 engine = create_async_engine(
     TEST_DATABASE_URL,
     connect_args={"check_same_thread": False},
@@ -46,10 +46,11 @@ TestingSessionLocal = async_sessionmaker(
 )
 
 
-#Create tables ONCE using SAME connection
+# Create tables ONCE using SAME connection
 @pytest.fixture(scope="session", autouse=True)
 async def create_tables():
     from app.models import email_verification, user  # noqa: F401
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -80,6 +81,26 @@ def mock_send_verification_email():
 
     with patch("app.services.verification_service.send_verification_email", _noop):
         yield
+
+
+# Stub Redis so tests don't need a running Redis server
+@pytest.fixture(autouse=True)
+def mock_redis():
+    blacklisted: set[str] = set()
+
+    async def _blacklist(jti, expires_in):
+        if expires_in > 0:
+            blacklisted.add(jti)
+
+    async def _is_blacklisted(jti):
+        return jti in blacklisted
+
+    with (
+        patch("app.core.redis.blacklist_token", side_effect=_blacklist),
+        patch("app.core.redis.is_token_blacklisted", side_effect=_is_blacklisted),
+        patch("app.core.middleware.is_token_blacklisted", side_effect=_is_blacklisted),
+    ):
+        yield blacklisted
 
 
 # HTTP client

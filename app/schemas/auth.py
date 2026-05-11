@@ -5,9 +5,6 @@ import re
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
-import re
-
-
 class ForgotPasswordRequest(BaseModel):
     """Payload for requesting a password reset link."""
 
@@ -56,6 +53,13 @@ class LoginRequest(BaseModel):
 
 
 class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
+class LogoutRequest(BaseModel):
+    """Payload for logging out — both tokens required."""
+
+    access_token: str
     refresh_token: str
 
 

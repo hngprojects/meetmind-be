@@ -2,9 +2,17 @@
 
 import logging
 import secrets
-from datetime import timedelta, timezone, datetime
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Cookie,
+    Depends,
+    Request,
+    Response,
+    status,
+)
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,9 +22,16 @@ from app.core.exceptions import UserAlreadyExistsException
 from app.core.limiter import limiter
 from app.core.responses import APIError, success
 from app.db.session import get_session
-from app.schemas.auth import ForgotPasswordRequest, LoginRequest, RefreshTokenRequest, ResetPasswordRequest, SignupRequest
-from app.schemas.verification import ResendVerificationRequest, VerifyEmailRequest
 from app.models.user import User
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    LogoutRequest,
+    RefreshTokenRequest,
+    ResetPasswordRequest,
+    SignupRequest,
+)
+from app.schemas.verification import ResendVerificationRequest, VerifyEmailRequest
 from app.services import google_oauth
 from app.services.auth import AuthService
 from app.services.email_service import send_password_reset_email
@@ -34,6 +49,7 @@ async def signup(
     payload: SignupRequest,
     response: Response,
     db: AsyncSession = Depends(get_session),
+    background_tasks: BackgroundTasks = None,
 ):
     """Register a new user, issue auth tokens, and attach session cookies.
 
@@ -68,10 +84,14 @@ async def signup(
         )
 
     try:
-        await verification_service.create_verification_token(db, user)
+        await verification_service.create_verification_token(
+            db, user, background_tasks=background_tasks
+        )
         access_token = await AuthService.create_access_token(user)
         ip = request.client.host if request.client else None
-        refresh_token, refresh_expires_at = await AuthService.create_refresh_token(db, user.id, ip_address=ip)
+        refresh_token, refresh_expires_at = await AuthService.create_refresh_token(
+            db, user.id, ip_address=ip
+        )
     except Exception:
         logger.exception("Failed to complete signup for user %s", user.id)
         raise APIError(
@@ -80,7 +100,9 @@ async def signup(
             code="internal_error",
         )
 
-    access_expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    )
 
     response.set_cookie(
         key="access_token",
@@ -150,6 +172,7 @@ async def resend_verification(
     request: Request,
     payload: ResendVerificationRequest,
     db: AsyncSession = Depends(get_session),
+    background_tasks: BackgroundTasks = None,
 ):
     """Reissue a verification email for an unverified account.
 
@@ -161,7 +184,9 @@ async def resend_verification(
     Returns:
         A standardized success envelope acknowledging the resend.
     """
-    await verification_service.resend_verification(db, payload.email)
+    await verification_service.resend_verification(
+        db, payload.email, background_tasks=background_tasks
+    )
     return success(message="Verification email resent")
 
 
@@ -192,6 +217,7 @@ async def reset_password(
     request: Request,
     payload: ResetPasswordRequest,
     db: AsyncSession = Depends(get_session),
+    background_tasks: BackgroundTasks = None,
 ):
     """Validate a reset token and update the user's password.
 
@@ -213,7 +239,9 @@ async def reset_password(
         APIError: 500 for any unexpected DB or network failure.
     """
     try:
-        await AuthService.reset_password(payload.token, payload.password, db)
+        await AuthService.reset_password(
+            payload.token, payload.password, db, background_tasks=background_tasks
+        )
     except APIError:
         raise
     except Exception:
@@ -224,10 +252,9 @@ async def reset_password(
             code="internal_error",
         )
 
-    return success(
-        {"next_step": "login"},
-        message="Password reset successfully. You can now sign in with your new password.",
-    )
+    msg = "Password reset successfully. You can now sign in with your new password."
+
+    return success({"next_step": "login"}, message=msg)
 
 
 @router.post("/forgot-password")
@@ -285,7 +312,9 @@ async def login(
     try:
         access_token = await AuthService.create_access_token(user)
         ip = request.client.host if request.client else None
-        refresh_token, refresh_expires_at = await AuthService.create_refresh_token(db, user.id, ip_address=ip)
+        refresh_token, refresh_expires_at = await AuthService.create_refresh_token(
+            db, user.id, ip_address=ip
+        )
     except Exception:
         logger.exception("Failed to issue tokens for user %s", user.id)
         raise APIError(
@@ -294,7 +323,9 @@ async def login(
             code="internal_error",
         )
 
-    access_expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    expiry_minutes = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    access_expires_at = datetime.now(timezone.utc) + expiry_minutes
 
     response.set_cookie(
         key="access_token",
@@ -351,7 +382,9 @@ async def refresh(
         APIError: ``invalid_refresh_token`` / ``token_revoked`` / ``token_expired``.
     """
     ip = request.client.host if request.client else None
-    result = await AuthService.refresh_access_token(payload.refresh_token, db, ip_address=ip)
+    result = await AuthService.refresh_access_token(
+        payload.refresh_token, db, ip_address=ip
+    )
 
     response.set_cookie(
         key="access_token",
@@ -384,14 +417,19 @@ async def refresh(
 
 @router.post("/logout")
 async def logout(
-    payload: RefreshTokenRequest,
+    payload: LogoutRequest,
     response: Response,
     db: AsyncSession = Depends(get_session),
 ):
-    """Revoke a refresh token and clear auth cookies.
+    """Revoke a refresh token, blacklist the access token, and clear cookies.
+
+    The access token's ``jti`` is added to the Redis blacklist so it is
+    rejected by the :class:`JWTBlacklistMiddleware` for the remainder of
+    its TTL, closing the window where a stolen access token could still be
+    used after logout.
 
     Args:
-        payload: Body containing the raw ``refresh_token`` to revoke.
+        payload: Body containing the ``access_token`` and ``refresh_token``.
         response: FastAPI response object used to clear auth cookies.
         db: Async database session injected by FastAPI.
 
@@ -399,9 +437,12 @@ async def logout(
         A standardized success envelope acknowledging the logout.
 
     Raises:
-        APIError: ``invalid_refresh_token`` if the token is not found.
+        APIError: ``invalid_refresh_token`` if the refresh token is not found.
     """
     await AuthService.logout(payload.refresh_token, db)
+
+    # Blacklist the access token so it cannot be reused
+    await AuthService.blacklist_access_token_raw(payload.access_token)
 
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
@@ -503,7 +544,9 @@ async def google_callback(
     try:
         access_token = await AuthService.create_access_token(user)
         ip = request.client.host if request.client else None
-        refresh_token, refresh_expires_at = await AuthService.create_refresh_token(db, user.id, ip_address=ip)
+        refresh_token, refresh_expires_at = await AuthService.create_refresh_token(
+            db, user.id, ip_address=ip
+        )
     except Exception:
         logger.exception("Failed to issue tokens for OAuth user %s", user.id)
         raise APIError(
@@ -512,7 +555,9 @@ async def google_callback(
             code="internal_error",
         )
 
-    access_expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    expiry_minutes = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    access_expires_at = datetime.now(timezone.utc) + expiry_minutes
 
     response.set_cookie(
         key="access_token",
