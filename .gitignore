@@ -1,3 +1,14 @@
+# Local developer files
+nul
+local-config
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Node
+node_modules/
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -14,10 +25,15 @@ wheels/
 
 # Editors / OS
 .idea/
-.vscode/
 .DS_Store
+
+# database
+docker-compose.override.yml
 
 # Test / coverage
 .pytest_cache/
 .coverage
 htmlcov/
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore
