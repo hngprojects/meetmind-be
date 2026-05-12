@@ -478,6 +478,28 @@ class TestGetAllInterviews:
         assert len(response.json()["data"]) == 0
         logger.info("[result]  Status filtering works as expected  ✓")
 
+    @pytest.mark.anyio
+    async def test_get_all_interviews_excludes_other_users_data(self, client: AsyncClient):
+        """
+        GIVEN User A and User B both have interviews
+        WHEN  User A calls GET /interviews
+        THEN  only User A's interviews are returned
+        """
+        token_a = await signup_and_get_token(client, unique_user("list_a"))
+        token_b = await signup_and_get_token(client, unique_user("list_b"))
+
+        await client.post(
+            INTERVIEWS_URL, json=VALID_INTERVIEW_PAYLOAD, headers=auth_headers(token_a)
+        )
+        await client.post(
+            INTERVIEWS_URL, json=VALID_INTERVIEW_PAYLOAD, headers=auth_headers(token_b)
+        )
+
+        response = await client.get(INTERVIEWS_URL, headers=auth_headers(token_a))
+        assert response.status_code == 200
+        assert len(response.json()["data"]) == 1
+        logger.info("[result]  Multi-user isolation for list endpoint verified  ✓")
+
 
 # ── PATCH /interviews/{id}/reschedule ─────────────────────────────────────────
 
