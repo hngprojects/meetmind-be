@@ -10,8 +10,6 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import StaticPool
 
 from app.db.session import get_session
-
-# Delay importing `app` until after tests have disabled the rate limiter
 from app.models.base import Base
 
 
@@ -52,6 +50,7 @@ async def create_tables():
     from app.models import (  # noqa: F401  # noqa: F401
         email_verification,
         interview,
+        scorecard,
         user,
         workspace,
     )

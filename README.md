@@ -59,6 +59,7 @@ meetmind-be/
 │   │   └── ask_mind.py                # AskMindSession, AskMindMessage, AskMindSuggestedPrompt
 │   ├── schemas/
 │   │   ├── auth.py                    # SignupRequest
+|   |   |── interview.py
 │   │   └── verification.py            # VerifyEmailRequest, ResendVerificationRequest
 │   └── services/
 │       ├── auth.py                    # AuthService: hashing, user creation, JWT issuance

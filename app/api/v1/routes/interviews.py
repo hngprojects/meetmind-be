@@ -10,7 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import CurrentUser
 from app.core.responses import success
 from app.db.session import get_session
-from app.schemas.interview import CreateInterviewRequest
+from app.schemas.interview import (
+    CreateInterviewRequest,
+    ScorecardSubmitRequest,
+)
 from app.services.interview import InterviewService
 
 router = APIRouter()
@@ -72,4 +75,92 @@ async def get_interview(
     return success(
         interview.model_dump(mode="json"),
         message="Interview session retrieved successfully",
+    )
+
+
+@router.patch(
+    "/{interview_id}/scorecard",
+    status_code=status.HTTP_200_OK,
+    response_model=dict,
+)
+async def submit_scorecard(
+    interview_id: uuid.UUID,
+    payload: ScorecardSubmitRequest,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    Submit or update the final scorecard for a completed interview.
+
+    Validates:
+    - interview ownership
+    - completed interview status
+    - workspace scorecard categories
+
+    Then:
+    - upserts InterviewScorecard
+    - upserts ScorecardScore rows
+    - updates Interview.rating
+
+    Args:
+        interview_id: UUID of the interview.
+        payload: Validated scorecard submission payload.
+        user: Authenticated user.
+        db: Async database session.
+
+    Returns:
+        Standardized success envelope containing scorecard data.
+    """
+    scorecard = await InterviewService.submit_scorecard(
+        interview_id=interview_id,
+        request=payload,
+        db=db,
+        user=user,
+    )
+
+    return success(
+        scorecard.model_dump(mode="json"),
+        message="Interview scorecard submitted successfully",
+    )
+
+
+@router.get(
+    "/{interview_id}/profile",
+    status_code=status.HTTP_200_OK,
+    response_model=dict,
+)
+async def get_candidate_profile(
+    interview_id: uuid.UUID,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_session),
+):
+    """
+    Retrieve the aggregated candidate profile linked to an interview.
+
+    Aggregates:
+    - candidate details
+    - interview metadata
+    - scorecard
+    - AI summary
+    - transcript status
+
+    Missing related resources return null instead of 404.
+
+    Args:
+        interview_id: UUID of the interview.
+        user: Authenticated user.
+        db: Async database session.
+
+    Returns:
+        Standardized success envelope containing candidate profile data.
+    """
+    profile = await InterviewService.get_candidate_profile(
+        interview_id=interview_id,
+        db=db,
+        user=user,
+    )
+
+    return success(
+        profile.model_dump(mode="json"),
+        message="Candidate profile retrieved successfully",
     )
