@@ -167,6 +167,8 @@ All responses use a standardized envelope defined in `app/core/responses.py`.
 | `POST` | `/api/v1/auth/signup` | No | Register user, issue JWT + refresh token |
 | `POST` | `/api/v1/auth/verify-email` | No | Redeem single-use email verification token |
 | `POST` | `/api/v1/auth/resend-verification` | No | Issue a fresh verification token |
+| `GET` | `/api/v1/candidates/stats` | Yes | Get candidate statistics for a workspace |
+| `GET` | `/api/v1/calendar` | Yes | Get all appointments with date filtering |
 
 ### Stub routers (registered, no endpoints yet)
 

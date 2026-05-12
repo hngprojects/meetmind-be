@@ -5,6 +5,8 @@ from fastapi import APIRouter
 from app.api.v1.routes import (
     ask_mind,
     auth,
+    calendar,
+    candidates,
     health,
     integrations,
     interviews,
@@ -21,6 +23,8 @@ api_router.include_router(users.router, prefix="/users", tags=["Users"])
 api_router.include_router(workspaces.router, prefix="/workspaces", tags=["Workspaces"])
 api_router.include_router(meetings.router, prefix="/meetings", tags=["Meetings"])
 api_router.include_router(interviews.router, prefix="/interviews", tags=["Interviews"])
+api_router.include_router(candidates.router, prefix="/candidates", tags=["Candidates"])
+api_router.include_router(calendar.router, prefix="/calendar", tags=["Calendar"])
 api_router.include_router(
     integrations.router, prefix="/integrations", tags=["Integrations"]
 )
