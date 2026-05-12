@@ -254,7 +254,7 @@ class InterviewService:
         non_cancellable = {"cancelled", "completed"}
         if interview.status in non_cancellable:
             raise APIError(
-                f"Interview cannot be cancelled — current status is '{interview.status}'",
+                f"Cannot cancel interview. Status is '{interview.status}'",
                 status_code=status.HTTP_409_CONFLICT,
                 code="interview_not_cancellable",
             )
