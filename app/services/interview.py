@@ -232,9 +232,7 @@ class InterviewService:
             APIError: 403 if the user is not the assigned interviewer.
             APIError: 409 if the interview is already cancelled or completed.
         """
-        result = await db.execute(
-            select(Interview).where(Interview.id == interview_id)
-        )
+        result = await db.execute(select(Interview).where(Interview.id == interview_id))
         interview = result.scalar_one_or_none()
 
         if not interview:

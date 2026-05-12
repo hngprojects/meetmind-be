@@ -534,9 +534,7 @@ class TestCancelInterview:
         logger.info("[result]        Cross-user cancel correctly blocked with 403  ✓")
 
     @pytest.mark.anyio
-    async def test_cancel_returns_409_when_already_cancelled(
-        self, client: AsyncClient
-    ):
+    async def test_cancel_returns_409_when_already_cancelled(self, client: AsyncClient):
         """
         GIVEN an interview that has already been cancelled
         WHEN  DELETE /interviews/{id}/cancel is called again
