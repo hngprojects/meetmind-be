@@ -16,6 +16,8 @@ from app.schemas.interview import (
     CreateInterviewRequest,
     InterviewResponse,
     InterviewSummaryResponse,
+    RescheduleInterviewRequest,
+    RescheduleInterviewResponse,
 )
 
 
@@ -203,4 +205,145 @@ class InterviewService:
             if summary
             else None,
             created_at=interview.created_at,
+        )
+
+
+    @staticmethod
+    async def get_all_interviews(
+        db: AsyncSession,
+        user: User,
+        status_filter: str | None = None,
+    ) -> list[InterviewResponse]:
+        """Retrieve all interview sessions for the authenticated user.
+
+        Args:
+            db: Active async database session.
+            user: The authenticated user.
+            status_filter: Optional status to filter by (e.g., 'live', 'upcoming').
+
+        Returns:
+            A list of populated :class:`InterviewResponse`.
+        """
+        stmt = (
+            select(Interview, Candidate, InterviewSummary)
+            .join(Candidate, Interview.candidate_id == Candidate.id)
+            .outerjoin(InterviewSummary, Interview.id == InterviewSummary.interview_id)
+            .where(Interview.interviewer_id == user.id)
+        )
+
+        if status_filter:
+            stmt = stmt.where(Interview.status == status_filter)
+
+        stmt = stmt.order_by(Interview.created_at.desc())
+
+        result = await db.execute(stmt)
+        rows = result.all()
+
+        return [
+            InterviewResponse(
+                id=interview.id,
+                title=interview.role_title,
+                status=interview.status,
+                role_title=interview.role_title,
+                platform=interview.platform,
+                ai_tone=interview.ai_tone,
+                candidate_name=candidate.full_name,
+                candidate_email=candidate.email,
+                summary=InterviewSummaryResponse(
+                    job_description=summary.job_description,
+                    scoring_rubric=summary.scoring_rubric,
+                    ai_assessment=summary.ai_assessment,
+                    status=summary.status,
+                )
+                if summary
+                else None,
+                created_at=interview.created_at,
+            )
+            for interview, candidate, summary in rows
+        ]
+
+
+    @staticmethod
+    async def reschedule_interview(
+        interview_id: uuid.UUID,
+        request: RescheduleInterviewRequest,
+        db: AsyncSession,
+        user: User,
+    ) -> RescheduleInterviewResponse:
+        """Update the scheduled time for an interview.
+
+        Args:
+            interview_id: UUID of the interview to reschedule.
+            request: New schedule details.
+            db: Active async database session.
+            user: The authenticated user.
+
+        Returns:
+            The updated :class:`RescheduleInterviewResponse`.
+        """
+        result = await db.execute(
+            select(Interview).where(
+                Interview.id == interview_id,
+                Interview.interviewer_id == user.id,
+            )
+        )
+        interview = result.scalar_one_or_none()
+
+        if not interview:
+            raise APIError(
+                "Interview not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+                code="interview_not_found",
+            )
+
+        if request.scheduled_end and request.scheduled_end <= request.scheduled_start:
+            raise APIError(
+                "Scheduled end time must be after the start time",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                code="invalid_time_range",
+            )
+
+        interview.scheduled_start = request.scheduled_start
+        interview.scheduled_end = request.scheduled_end
+
+        # Recalculate duration if both are present
+        if interview.scheduled_start and interview.scheduled_end:
+            delta = interview.scheduled_end - interview.scheduled_start
+            interview.duration_min = int(delta.total_seconds() / 60)
+
+        await db.commit()
+
+        # Fetch candidate and summary for the response
+        candidate_result = await db.execute(
+            select(Candidate).where(Candidate.id == interview.candidate_id)
+        )
+        candidate = candidate_result.scalar_one_or_none()
+
+        summary_result = await db.execute(
+            select(InterviewSummary).where(
+                InterviewSummary.interview_id == interview.id
+            )
+        )
+        summary = summary_result.scalar_one_or_none()
+
+        return RescheduleInterviewResponse(
+            id=interview.id,
+            title=interview.role_title,
+            status=interview.status,
+            role_title=interview.role_title,
+            platform=interview.platform,
+            ai_tone=interview.ai_tone,
+            candidate_name=candidate.full_name if candidate else "Unknown",
+            candidate_email=candidate.email if candidate else None,
+            summary=InterviewSummaryResponse(
+                job_description=summary.job_description if summary else None,
+                scoring_rubric=summary.scoring_rubric if summary else None,
+                ai_assessment=summary.ai_assessment if summary else None,
+                status=summary.status if summary else None,
+            )
+            if summary
+            else None,
+            created_at=interview.created_at,
+            scheduled_start=interview.scheduled_start,
+            scheduled_end=interview.scheduled_end,
         )

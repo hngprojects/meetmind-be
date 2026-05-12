@@ -23,6 +23,13 @@ class CreateInterviewRequest(BaseModel):
     ai_tone: str | None = Field(default=None, max_length=20)
 
 
+class RescheduleInterviewRequest(BaseModel):
+    """Payload for rescheduling an interview."""
+
+    scheduled_start: datetime = Field(...)
+    scheduled_end: datetime | None = Field(default=None)
+
+
 # ── Response schemas ───────────────────────────────────────────────────────────
 
 
@@ -50,3 +57,8 @@ class InterviewResponse(BaseModel):
     created_at: datetime | None
 
     model_config = {"from_attributes": True}
+class RescheduleInterviewResponse(InterviewResponse):
+    """Interview response including scheduled times."""
+
+    scheduled_start: datetime | None
+    scheduled_end: datetime | None
