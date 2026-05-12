@@ -537,7 +537,8 @@ class TestRescheduleInterview:
         body = response.json()
         logger.info(
             "[reschedule] PATCH /interviews/%s → %d",
-            interview_id, response.status_code,
+            interview_id,
+            response.status_code,
         )
 
         assert response.status_code == 200
@@ -546,9 +547,7 @@ class TestRescheduleInterview:
         # so we check if it's generally correct
         assert "scheduled_start" in data
         assert data["scheduled_start"].startswith(new_start[:10])
-        logger.info(
-            "[result]     Interview rescheduled successfully  ✓"
-        )
+        logger.info("[result]     Interview rescheduled successfully  ✓")
 
     @pytest.mark.anyio
     async def test_reschedule_fails_when_end_before_start(self, client: AsyncClient):
@@ -580,7 +579,8 @@ class TestRescheduleInterview:
         body = response.json()
         logger.info(
             "[invalid range] PATCH /interviews/%s → %d",
-            interview_id, response.status_code,
+            interview_id,
+            response.status_code,
         )
 
         assert response.status_code == 400
@@ -615,6 +615,4 @@ class TestRescheduleInterview:
         )
 
         assert response.status_code == 404
-        logger.info(
-            "[result]        Cross-user reschedule blocked  ✓"
-        )
+        logger.info("[result]        Cross-user reschedule blocked  ✓")

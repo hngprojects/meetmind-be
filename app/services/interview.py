@@ -207,7 +207,6 @@ class InterviewService:
             created_at=interview.created_at,
         )
 
-
     @staticmethod
     async def get_all_interviews(
         db: AsyncSession,
@@ -261,7 +260,6 @@ class InterviewService:
             )
             for interview, candidate, summary in rows
         ]
-
 
     @staticmethod
     async def reschedule_interview(

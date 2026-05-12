@@ -57,6 +57,8 @@ class InterviewResponse(BaseModel):
     created_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
 class RescheduleInterviewResponse(InterviewResponse):
     """Interview response including scheduled times."""
 
