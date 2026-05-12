@@ -12,6 +12,7 @@ class CandidateStatsData(BaseModel):
 
 class CandidateStatsResponse(BaseModel):
     """Envelope for candidate statistics response."""
+
     success: bool = True
     message: str = "OK"
     data: CandidateStatsData

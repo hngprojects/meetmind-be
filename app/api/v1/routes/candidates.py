@@ -1,10 +1,9 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, DBSession
 from app.core.responses import success
-from app.schemas.candidates import CandidateStatsResponse
 from app.services.candidates import get_candidate_stats
 from app.services.workspaces import validate_workspace_membership
 
@@ -44,7 +43,4 @@ async def fetch_candidate_stats(
     # Execute optimized database-level aggregation
     stats = await get_candidate_stats(db, workspace_id=workspace_id)
 
-    return success(
-        data=stats, 
-        message="Candidate statistics fetched successfully"
-    )
+    return success(data=stats, message="Candidate statistics fetched successfully")

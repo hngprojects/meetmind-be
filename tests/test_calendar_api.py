@@ -5,8 +5,8 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.main import app
 from app.api.deps import get_current_user
+from app.main import app
 from app.models.interview import Candidate, Interview
 from app.models.user import User
 from app.models.workspace import WorkspaceMember
@@ -37,7 +37,7 @@ async def calendar_setup(db_session: AsyncSession):
 
     # Reference time to avoid race conditions
     now = datetime.now()
-    
+
     # Today's interview (1 hour from now)
     interview_today = Interview(
         id=uuid.uuid4(),
@@ -75,7 +75,8 @@ async def test_list_calendar_today(client: AsyncClient, calendar_setup):
 
     today_str = date.today().isoformat()
     response = await client.get(
-        "/api/v1/calendar", params={"workspace_id": str(workspace_id), "date": today_str}
+        "/api/v1/calendar",
+        params={"workspace_id": str(workspace_id), "date": today_str},
     )
 
     app.dependency_overrides.clear()
@@ -103,7 +104,9 @@ async def test_list_calendar_unauthorized(client: AsyncClient, calendar_setup):
 
 
 @pytest.mark.anyio
-async def test_list_calendar_default_returns_all_future(client: AsyncClient, calendar_setup):
+async def test_list_calendar_default_returns_all_future(
+    client: AsyncClient, calendar_setup
+):
     """Verify that without a date parameter, all future appointments are returned."""
     user, workspace_id = calendar_setup
     app.dependency_overrides[get_current_user] = lambda: user

@@ -18,9 +18,15 @@ async def get_candidate_stats(
     """
     stmt = select(
         func.count(Interview.id).label("total"),
-        func.sum(case((Interview.status == "completed", 1), else_=0)).label("completed"),
-        func.sum(case((Interview.status.in_(["ongoing", "live"]), 1), else_=0)).label("ongoing"),
-        func.sum(case((Interview.status == "failed", 1), else_=0)).label("needs_attention"),
+        func.sum(case((Interview.status == "completed", 1), else_=0)).label(
+            "completed"
+        ),
+        func.sum(case((Interview.status.in_(["ongoing", "live"]), 1), else_=0)).label(
+            "ongoing"
+        ),
+        func.sum(case((Interview.status == "failed", 1), else_=0)).label(
+            "needs_attention"
+        ),
     ).where(Interview.workspace_id == workspace_id)
 
     result = await db.execute(stmt)

@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from app.api.deps import DBSession, CurrentUser
+from app.api.deps import CurrentUser, DBSession
 from app.core.responses import success
 from app.services.calendar import get_calendar_appointments
 from app.services.workspaces import validate_workspace_membership
@@ -45,5 +45,5 @@ async def list_appointments(
 
     return success(
         data={"appointments": appointments},
-        message="Calendar appointments fetched successfully"
+        message="Calendar appointments fetched successfully",
     )
