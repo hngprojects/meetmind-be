@@ -11,9 +11,8 @@ from app.api.deps import CurrentUser
 from app.core.responses import success
 from app.db.session import get_session
 from app.schemas.interview import CreateInterviewRequest
-from app.schemas.chat import ChatHistoryResponse
-from app.services.interview import InterviewService
 from app.services.chat_history import ChatHistoryService
+from app.services.interview import InterviewService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -104,4 +103,3 @@ async def get_chat_history(
         history.model_dump(mode="json"),
         message="Chat history retrieved successfully",
     )
-

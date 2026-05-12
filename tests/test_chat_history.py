@@ -5,6 +5,7 @@ Tests for GET /api/v1/interviews/{interview_id}/chat/history
 from __future__ import annotations
 
 import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -16,6 +17,7 @@ CHAT_HISTORY_URL = "/api/v1/interviews/{id}/chat/history"
 
 
 # ── helpers ──────────────────────────────────────────────────────────
+
 
 def unique_user(tag: str | None = None) -> dict:
     suffix = tag or uuid.uuid4().hex[:8]
@@ -46,8 +48,8 @@ VALID_INTERVIEW_PAYLOAD = {
 
 # ── tests ────────────────────────────────────────────────────────────
 
-class TestGetChatHistory:
 
+class TestGetChatHistory:
     @pytest.mark.anyio
     async def test_returns_empty_when_no_transcript(self, client: AsyncClient):
         token = await signup_and_get_token(client, unique_user())
@@ -101,9 +103,7 @@ class TestGetChatHistory:
 
     @pytest.mark.anyio
     async def test_returns_401_unauthenticated(self, client: AsyncClient):
-        res = await client.get(
-            CHAT_HISTORY_URL.format(id=str(uuid.uuid4()))
-        )
+        res = await client.get(CHAT_HISTORY_URL.format(id=str(uuid.uuid4())))
         assert res.status_code == 401
 
     @pytest.mark.anyio

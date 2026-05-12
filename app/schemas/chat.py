@@ -26,4 +26,3 @@ class ChatHistoryResponse(BaseModel):
     interview_id: UUID
     total_messages: int
     messages: list[ChatMessageResponse]
-    
