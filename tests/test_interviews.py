@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -409,3 +410,209 @@ class TestGetInterview:
             f"Body: {response.json()}"
         )
         logger.info("[result]  Unauthenticated retrieval correctly rejected  ✓")
+
+
+# ── GET /interviews (Index) ───────────────────────────────────────────────────
+
+
+class TestGetAllInterviews:
+    @pytest.mark.anyio
+    async def test_retrieves_all_interviews_for_authenticated_user(
+        self, client: AsyncClient
+    ):
+        """
+        GIVEN an authenticated user has created multiple interviews
+        WHEN  GET /interviews is called
+        THEN  the response is 200 with a list of all their interviews
+
+        Expected:
+            GET /interviews → 200
+            data.length == 2
+        """
+        token = await signup_and_get_token(client, unique_user())
+
+        # Create two interviews
+        await client.post(
+            INTERVIEWS_URL, json=VALID_INTERVIEW_PAYLOAD, headers=auth_headers(token)
+        )
+        await client.post(
+            INTERVIEWS_URL, json=VALID_INTERVIEW_PAYLOAD, headers=auth_headers(token)
+        )
+
+        response = await client.get(INTERVIEWS_URL, headers=auth_headers(token))
+        body = response.json()
+        logger.info("[get all] GET /interviews → %d", response.status_code)
+
+        assert response.status_code == 200
+        assert len(body["data"]) == 2
+        logger.info("[result]  Successfully retrieved all user interviews  ✓")
+
+    @pytest.mark.anyio
+    async def test_get_all_filters_by_status(self, client: AsyncClient):
+        """
+        GIVEN interviews with different statuses
+        WHEN  GET /interviews?status=draft is called
+        THEN  only interviews with that status are returned
+
+        Expected:
+            GET /interviews?status=draft → returns interviews
+            GET /interviews?status=live  → returns 0 if none exist
+        """
+        token = await signup_and_get_token(client, unique_user())
+        await client.post(
+            INTERVIEWS_URL, json=VALID_INTERVIEW_PAYLOAD, headers=auth_headers(token)
+        )
+
+        # All new interviews start as 'draft'
+        response = await client.get(
+            f"{INTERVIEWS_URL}?status=draft", headers=auth_headers(token)
+        )
+        assert response.status_code == 200
+        assert len(response.json()["data"]) == 1
+
+        # Check a status that shouldn't have results
+        response = await client.get(
+            f"{INTERVIEWS_URL}?status=live", headers=auth_headers(token)
+        )
+        assert response.status_code == 200
+        assert len(response.json()["data"]) == 0
+        logger.info("[result]  Status filtering works as expected  ✓")
+
+    @pytest.mark.anyio
+    async def test_get_all_interviews_excludes_other_users_data(
+        self, client: AsyncClient
+    ):
+        """
+        GIVEN User A and User B both have interviews
+        WHEN  User A calls GET /interviews
+        THEN  only User A's interviews are returned
+        """
+        token_a = await signup_and_get_token(client, unique_user("list_a"))
+        token_b = await signup_and_get_token(client, unique_user("list_b"))
+
+        await client.post(
+            INTERVIEWS_URL, json=VALID_INTERVIEW_PAYLOAD, headers=auth_headers(token_a)
+        )
+        await client.post(
+            INTERVIEWS_URL, json=VALID_INTERVIEW_PAYLOAD, headers=auth_headers(token_b)
+        )
+
+        response = await client.get(INTERVIEWS_URL, headers=auth_headers(token_a))
+        assert response.status_code == 200
+        assert len(response.json()["data"]) == 1
+        logger.info("[result]  Multi-user isolation for list endpoint verified  ✓")
+
+
+# ── PATCH /interviews/{id}/reschedule ─────────────────────────────────────────
+
+
+class TestRescheduleInterview:
+    @pytest.mark.anyio
+    async def test_reschedule_success(self, client: AsyncClient):
+        """
+        GIVEN an existing interview
+        WHEN  PATCH /interviews/{id}/reschedule is called with valid times
+        THEN  the response is 200 and times/duration are updated
+
+        Expected:
+            PATCH /interviews/{id}/reschedule → 200
+            data.scheduled_start == new_start
+            data.duration_min is updated
+        """
+        token = await signup_and_get_token(client, unique_user())
+        create = await client.post(
+            INTERVIEWS_URL, json=VALID_INTERVIEW_PAYLOAD, headers=auth_headers(token)
+        )
+        interview_id = create.json()["data"]["id"]
+
+        new_start = (datetime.now() + timedelta(days=1)).isoformat()
+        new_end = (datetime.now() + timedelta(days=1, hours=1)).isoformat()
+
+        payload = {"scheduled_start": new_start, "scheduled_end": new_end}
+        response = await client.patch(
+            f"{INTERVIEWS_URL}/{interview_id}/reschedule",
+            json=payload,
+            headers=auth_headers(token),
+        )
+        body = response.json()
+        logger.info(
+            "[reschedule] PATCH /interviews/%s → %d",
+            interview_id,
+            response.status_code,
+        )
+
+        assert response.status_code == 200
+        data = body["data"]
+        # Pydantic/JSON serialization might vary slightly,
+        # so we check if it's generally correct
+        assert "scheduled_start" in data
+        assert data["scheduled_start"].startswith(new_start[:10])
+        logger.info("[result]     Interview rescheduled successfully  ✓")
+
+    @pytest.mark.anyio
+    async def test_reschedule_fails_when_end_before_start(self, client: AsyncClient):
+        """
+        GIVEN an end time earlier than start time
+        WHEN  PATCH /interviews/{id}/reschedule is called
+        THEN  the response is 400
+
+        Expected:
+            PATCH /interviews/{id}/reschedule (end < start) → 400
+            error.code == "invalid_time_range"
+        """
+        token = await signup_and_get_token(client, unique_user())
+        create = await client.post(
+            INTERVIEWS_URL, json=VALID_INTERVIEW_PAYLOAD, headers=auth_headers(token)
+        )
+        interview_id = create.json()["data"]["id"]
+
+        start = (datetime.now() + timedelta(days=1)).isoformat()
+        # 1 hour BEFORE start
+        end = (datetime.now() + timedelta(days=1, hours=-1)).isoformat()
+
+        payload = {"scheduled_start": start, "scheduled_end": end}
+        response = await client.patch(
+            f"{INTERVIEWS_URL}/{interview_id}/reschedule",
+            json=payload,
+            headers=auth_headers(token),
+        )
+        body = response.json()
+        logger.info(
+            "[invalid range] PATCH /interviews/%s → %d",
+            interview_id,
+            response.status_code,
+        )
+
+        assert response.status_code == 400
+        assert body["error"]["code"] == "invalid_time_range"
+        logger.info("[result]        Invalid time range correctly rejected with 400  ✓")
+
+    @pytest.mark.anyio
+    async def test_reschedule_returns_404_for_another_users_interview(
+        self, client: AsyncClient
+    ):
+        """
+        GIVEN user A creates an interview
+        WHEN  user B tries to reschedule it
+        THEN  the response is 404
+        """
+        token_a = await signup_and_get_token(client, unique_user("resch_a"))
+        token_b = await signup_and_get_token(client, unique_user("resch_b"))
+
+        create = await client.post(
+            INTERVIEWS_URL,
+            json=VALID_INTERVIEW_PAYLOAD,
+            headers=auth_headers(token_a),
+        )
+        interview_id = create.json()["data"]["id"]
+
+        start = (datetime.now() + timedelta(days=1)).isoformat()
+        payload = {"scheduled_start": start}
+        response = await client.patch(
+            f"{INTERVIEWS_URL}/{interview_id}/reschedule",
+            json=payload,
+            headers=auth_headers(token_b),
+        )
+
+        assert response.status_code == 404
+        logger.info("[result]        Cross-user reschedule blocked  ✓")

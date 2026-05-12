@@ -4,13 +4,13 @@ and scorecard endpoints."""
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentUser
 from app.core.responses import success
 from app.db.session import get_session
-from app.schemas.interview import CreateInterviewRequest
+from app.schemas.interview import CreateInterviewRequest, RescheduleInterviewRequest
 from app.services.interview import InterviewService
 
 router = APIRouter()
@@ -72,4 +72,62 @@ async def get_interview(
     return success(
         interview.model_dump(mode="json"),
         message="Interview session retrieved successfully",
+    )
+
+
+@router.get("", status_code=status.HTTP_200_OK)
+async def get_all_interviews(
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_session),
+    interview_status: str | None = Query(
+        None,
+        alias="status",
+        description="Filter by interview status (e.g., live, upcoming, completed)",
+    ),
+):
+    """Retrieve all interview sessions for the authenticated user.
+
+    Args:
+        user: The authenticated user.
+        db: Async database session.
+
+    Returns:
+        A standardized success envelope with the interview sessions data.
+
+    Raises:
+        APIError: 500 for any unexpected failure.
+    """
+    interviews = await InterviewService.get_all_interviews(
+        db, user, status_filter=interview_status
+    )
+    return success(
+        [interview.model_dump(mode="json") for interview in interviews],
+        message="Interview sessions retrieved successfully",
+    )
+
+
+@router.patch("/{interview_id}/reschedule", status_code=status.HTTP_200_OK)
+async def reschedule_interview(
+    interview_id: uuid.UUID,
+    payload: RescheduleInterviewRequest,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_session),
+):
+    """Move an interview to a new date and time.
+
+    Args:
+        interview_id: UUID of the interview to reschedule.
+        payload: Validated rescheduling payload.
+        user: The authenticated user.
+        db: Async database session.
+
+    Returns:
+        A standardized success envelope with the updated interview session.
+    """
+    interview = await InterviewService.reschedule_interview(
+        interview_id, payload, db, user
+    )
+    return success(
+        interview.model_dump(mode="json"),
+        message="Interview rescheduled successfully",
     )
