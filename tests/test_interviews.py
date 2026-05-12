@@ -479,7 +479,9 @@ class TestGetAllInterviews:
         logger.info("[result]  Status filtering works as expected  ✓")
 
     @pytest.mark.anyio
-    async def test_get_all_interviews_excludes_other_users_data(self, client: AsyncClient):
+    async def test_get_all_interviews_excludes_other_users_data(
+        self, client: AsyncClient
+    ):
         """
         GIVEN User A and User B both have interviews
         WHEN  User A calls GET /interviews
