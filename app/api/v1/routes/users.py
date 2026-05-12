@@ -3,12 +3,13 @@
 from fastapi import APIRouter
 
 from app.api.deps import CurrentUser
-from app.core.responses import success
+from app.core.responses import APIResponse, success
+from app.schemas.users import UserResponse
 
 router = APIRouter()
 
 
-@router.get("/me")
+@router.get("/me", response_model=APIResponse[UserResponse])
 async def get_me(user: CurrentUser):
     """Return the authenticated user's profile.
 

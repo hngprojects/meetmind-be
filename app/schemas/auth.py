@@ -129,3 +129,35 @@ class SignupRequest(BaseModel):
         if not re.search(r"\d", v):
             raise ValueError("Password must contain at least one digit")
         return v
+
+
+class TokenResponse(BaseModel):
+    """Payload containing authentication tokens and their expiry."""
+
+    access_token: str
+    refresh_token: str
+    access_token_expires_at: str
+    refresh_token_expires_at: str
+
+
+class AuthResponse(TokenResponse):
+    """Payload returned after successful signup or login."""
+
+    id: str
+    email: EmailStr
+    name: str | None = None
+    next_step: str | None = None
+
+
+class VerificationResponse(BaseModel):
+    """Payload returned after email verification or status check."""
+
+    id: str
+    email: EmailStr
+    next_step: str | None = None
+
+
+class ResetPasswordResponse(BaseModel):
+    """Payload returned after a password reset request or action."""
+
+    next_step: str
