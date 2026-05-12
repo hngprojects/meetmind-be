@@ -50,3 +50,13 @@ class InterviewResponse(BaseModel):
     created_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
+class InterviewCancelResponse(BaseModel):
+    """Response returned when an interview is cancelled."""
+
+    id: UUID
+    status: str
+    cancelled_at: datetime
+
+    model_config = {"from_attributes": True}

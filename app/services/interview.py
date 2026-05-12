@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import status
 from sqlalchemy import select
@@ -14,6 +15,7 @@ from app.models.user import User
 from app.models.workspace import Workspace, WorkspaceMember
 from app.schemas.interview import (
     CreateInterviewRequest,
+    InterviewCancelResponse,
     InterviewResponse,
     InterviewSummaryResponse,
 )
@@ -203,4 +205,65 @@ class InterviewService:
             if summary
             else None,
             created_at=interview.created_at,
+        )
+
+    @staticmethod
+    async def cancel_interview(
+        interview_id: uuid.UUID,
+        db: AsyncSession,
+        user: User,
+    ) -> InterviewCancelResponse:
+        """Cancel a scheduled or draft interview.
+
+        Performs a soft-cancel by transitioning the interview status to
+        ``cancelled`` and recording the cancellation timestamp. Only the
+        assigned interviewer may cancel their own interviews.
+
+        Args:
+            interview_id: UUID of the interview to cancel.
+            db: Active async database session.
+            user: The authenticated user requesting cancellation.
+
+        Returns:
+            A populated :class:`InterviewCancelResponse`.
+
+        Raises:
+            APIError: 404 if the interview does not exist.
+            APIError: 403 if the user is not the assigned interviewer.
+            APIError: 409 if the interview is already cancelled or completed.
+        """
+        result = await db.execute(select(Interview).where(Interview.id == interview_id))
+        interview = result.scalar_one_or_none()
+
+        if not interview:
+            raise APIError(
+                "Interview not found",
+                status_code=status.HTTP_404_NOT_FOUND,
+                code="interview_not_found",
+            )
+
+        if interview.interviewer_id != user.id:
+            raise APIError(
+                "You are not authorised to cancel this interview",
+                status_code=status.HTTP_403_FORBIDDEN,
+                code="forbidden",
+            )
+
+        non_cancellable = {"cancelled", "completed"}
+        if interview.status in non_cancellable:
+            raise APIError(
+                f"Cannot cancel interview. Status is '{interview.status}'",
+                status_code=status.HTTP_409_CONFLICT,
+                code="interview_not_cancellable",
+            )
+
+        now = datetime.now(timezone.utc)
+        interview.status = "cancelled"
+        interview.cancelled_at = now
+        await db.commit()
+
+        return InterviewCancelResponse(
+            id=interview.id,
+            status=interview.status,
+            cancelled_at=now,
         )

@@ -381,17 +381,20 @@ def upgrade() -> None:
                type_=sa.DateTime(timezone=True),
                postgresql_using="updated_at AT TIME ZONE 'UTC'",
                existing_nullable=True)
-    op.alter_column('user_interview_preferences', 'created_at',
-               existing_type=postgresql.TIMESTAMP(),
-               type_=sa.DateTime(timezone=True),
-               postgresql_using="created_at AT TIME ZONE 'UTC'",
-               existing_nullable=True,
-               existing_server_default=sa.text('now()'))
-    op.alter_column('user_interview_preferences', 'updated_at',
-               existing_type=postgresql.TIMESTAMP(),
-               type_=sa.DateTime(timezone=True),
-               postgresql_using="updated_at AT TIME ZONE 'UTC'",
-               existing_nullable=True)
+    op.execute("""
+        DO $$ BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='user_interview_preferences'
+                     AND column_name='created_at') THEN
+            ALTER TABLE user_interview_preferences
+              ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE
+              USING created_at AT TIME ZONE 'UTC';
+            ALTER TABLE user_interview_preferences
+              ALTER COLUMN updated_at TYPE TIMESTAMP WITH TIME ZONE
+              USING updated_at AT TIME ZONE 'UTC';
+          END IF;
+        END $$;
+    """)
     op.alter_column('user_meeting_preferences', 'created_at',
                existing_type=postgresql.TIMESTAMP(),
                type_=sa.DateTime(timezone=True),
@@ -414,17 +417,20 @@ def upgrade() -> None:
                type_=sa.DateTime(timezone=True),
                postgresql_using="updated_at AT TIME ZONE 'UTC'",
                existing_nullable=True)
-    op.alter_column('user_platform_integrations', 'created_at',
-               existing_type=postgresql.TIMESTAMP(),
-               type_=sa.DateTime(timezone=True),
-               postgresql_using="created_at AT TIME ZONE 'UTC'",
-               existing_nullable=True,
-               existing_server_default=sa.text('now()'))
-    op.alter_column('user_platform_integrations', 'updated_at',
-               existing_type=postgresql.TIMESTAMP(),
-               type_=sa.DateTime(timezone=True),
-               postgresql_using="updated_at AT TIME ZONE 'UTC'",
-               existing_nullable=True)
+    op.execute("""
+        DO $$ BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name='user_platform_integrations'
+                     AND column_name='created_at') THEN
+            ALTER TABLE user_platform_integrations
+              ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE
+              USING created_at AT TIME ZONE 'UTC';
+            ALTER TABLE user_platform_integrations
+              ALTER COLUMN updated_at TYPE TIMESTAMP WITH TIME ZONE
+              USING updated_at AT TIME ZONE 'UTC';
+          END IF;
+        END $$;
+    """)
     op.alter_column('user_privacy_settings', 'created_at',
                existing_type=postgresql.TIMESTAMP(),
                type_=sa.DateTime(timezone=True),

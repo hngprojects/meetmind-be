@@ -409,3 +409,193 @@ class TestGetInterview:
             f"Body: {response.json()}"
         )
         logger.info("[result]  Unauthenticated retrieval correctly rejected  ✓")
+
+
+# ── POST /interviews/{id}/cancel ───────────────────────────────────────────────
+
+
+class TestCancelInterview:
+    @pytest.mark.anyio
+    async def test_cancel_draft_interview_returns_200(self, client: AsyncClient):
+        """
+        GIVEN a draft interview created by the authenticated user
+        WHEN  DELETE /interviews/{id}/cancel is called
+        THEN  the response is 200 with status "cancelled" and a cancelled_at timestamp
+
+        Expected:
+            POST /interviews            → 201  (create)
+            POST /interviews/{id}/cancel → 200  (cancel)
+            data.status      == "cancelled"
+            data.cancelled_at is present
+        """
+        token = await signup_and_get_token(client, unique_user())
+        create = await client.post(
+            INTERVIEWS_URL,
+            json=VALID_INTERVIEW_PAYLOAD,
+            headers=auth_headers(token),
+        )
+        assert create.status_code == 201
+        interview_id = create.json()["data"]["id"]
+        logger.info("[create] POST /interviews → 201  id=%s  ✓", interview_id)
+
+        cancel = await client.post(
+            f"{INTERVIEWS_URL}/{interview_id}/cancel",
+            headers=auth_headers(token),
+        )
+        body = cancel.json()
+        logger.info(
+            "[cancel] POST /interviews/%s/cancel → %d",
+            interview_id,
+            cancel.status_code,
+        )
+
+        assert cancel.status_code == 200, (
+            f"Expected 200 but got {cancel.status_code}. Body: {body}"
+        )
+        data = body["data"]
+        assert data["status"] == "cancelled", (
+            f"Expected status 'cancelled' but got '{data['status']}'"
+        )
+        assert data["cancelled_at"] is not None, "cancelled_at should be set"
+        logger.info("[result] Interview cancelled successfully  ✓")
+
+    @pytest.mark.anyio
+    async def test_cancel_returns_404_for_nonexistent_interview(
+        self, client: AsyncClient
+    ):
+        """
+        GIVEN a random UUID that does not exist
+        WHEN  POST /interviews/{id}/cancel is called
+        THEN  the response is 404
+
+        Expected:
+            POST /interviews/{random_uuid}/cancel → 404
+            error.code == "interview_not_found"
+        """
+        token = await signup_and_get_token(client, unique_user())
+        fake_id = str(uuid.uuid4())
+        response = await client.post(
+            f"{INTERVIEWS_URL}/{fake_id}/cancel",
+            headers=auth_headers(token),
+        )
+        body = response.json()
+        logger.info(
+            "[not found] POST /interviews/%s/cancel → %d",
+            fake_id,
+            response.status_code,
+        )
+
+        assert response.status_code == 404, (
+            f"Expected 404 but got {response.status_code}. Body: {body}"
+        )
+        assert body["error"]["code"] == "interview_not_found"
+        logger.info("[result]    Nonexistent interview correctly returns 404  ✓")
+
+    @pytest.mark.anyio
+    async def test_cancel_returns_403_for_another_users_interview(
+        self, client: AsyncClient
+    ):
+        """
+        GIVEN user A creates an interview
+        WHEN  user B tries to cancel it
+        THEN  the response is 403 — only the interviewer may cancel
+
+        Expected:
+            POST /interviews (user A)            → 201
+            POST /interviews/{id}/cancel (user B) → 403
+        """
+        token_a = await signup_and_get_token(client, unique_user("cancel_a"))
+        token_b = await signup_and_get_token(client, unique_user("cancel_b"))
+
+        create = await client.post(
+            INTERVIEWS_URL,
+            json=VALID_INTERVIEW_PAYLOAD,
+            headers=auth_headers(token_a),
+        )
+        assert create.status_code == 201
+        interview_id = create.json()["data"]["id"]
+        logger.info("[user A create] POST /interviews → 201  id=%s  ✓", interview_id)
+
+        cancel = await client.post(
+            f"{INTERVIEWS_URL}/{interview_id}/cancel",
+            headers=auth_headers(token_b),
+        )
+        body = cancel.json()
+        logger.info(
+            "[user B cancel] POST /interviews/%s/cancel → %d",
+            interview_id,
+            cancel.status_code,
+        )
+
+        assert cancel.status_code == 403, (
+            f"Expected 403 but got {cancel.status_code}. Body: {body}"
+        )
+        assert body["error"]["code"] == "forbidden"
+        logger.info("[result]        Cross-user cancel correctly blocked with 403  ✓")
+
+    @pytest.mark.anyio
+    async def test_cancel_returns_409_when_already_cancelled(self, client: AsyncClient):
+        """
+        GIVEN an interview that has already been cancelled
+        WHEN  DELETE /interviews/{id}/cancel is called again
+        THEN  the response is 409
+
+        Expected:
+            POST /interviews            → 201  (create)
+            POST /interviews/{id}/cancel → 200  (first cancel)
+            POST /interviews/{id}/cancel → 409  (second cancel)
+        """
+        token = await signup_and_get_token(client, unique_user())
+        create = await client.post(
+            INTERVIEWS_URL,
+            json=VALID_INTERVIEW_PAYLOAD,
+            headers=auth_headers(token),
+        )
+        assert create.status_code == 201
+        interview_id = create.json()["data"]["id"]
+
+        # First cancel — should succeed
+        first = await client.post(
+            f"{INTERVIEWS_URL}/{interview_id}/cancel",
+            headers=auth_headers(token),
+        )
+        assert first.status_code == 200
+        logger.info("[first cancel] → 200  ✓")
+
+        # Second cancel — should conflict
+        second = await client.post(
+            f"{INTERVIEWS_URL}/{interview_id}/cancel",
+            headers=auth_headers(token),
+        )
+        body = second.json()
+        logger.info("[second cancel] → %d", second.status_code)
+
+        assert second.status_code == 409, (
+            f"Expected 409 but got {second.status_code}. Body: {body}"
+        )
+        assert body["error"]["code"] == "interview_not_cancellable"
+        logger.info("[result] Already-cancelled interview correctly returns 409  ✓")
+
+    @pytest.mark.anyio
+    async def test_cancel_returns_401_without_token(self, client: AsyncClient):
+        """
+        GIVEN no Authorization header
+        WHEN  POST /interviews/{id}/cancel is called
+        THEN  the response is 401
+
+        Expected:
+            POST /interviews/{id}/cancel (no auth) → 401
+        """
+        fake_id = str(uuid.uuid4())
+        response = await client.post(f"{INTERVIEWS_URL}/{fake_id}/cancel")
+        logger.info(
+            "[no auth] POST /interviews/%s/cancel → %d",
+            fake_id,
+            response.status_code,
+        )
+
+        assert response.status_code == 401, (
+            f"Expected 401 without token but got {response.status_code}."
+            f"Body: {response.json()}"
+        )
+        logger.info("[result]  Unauthenticated cancel correctly rejected  ✓")
