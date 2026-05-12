@@ -4,12 +4,13 @@ from fastapi import APIRouter
 from sqlalchemy import text
 
 from app.api.deps import DBSession
-from app.core.responses import success
+from app.core.responses import APIResponse, success
+from app.schemas.health import HealthStatus
 
 router = APIRouter()
 
 
-@router.get("")
+@router.get("", response_model=APIResponse[HealthStatus])
 async def health(db: DBSession):
     """Probe service liveness and database connectivity.
 

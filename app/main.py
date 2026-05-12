@@ -21,8 +21,11 @@ from app.core.limiter import limiter
 from app.core.logging import setup_logging
 from app.core.middleware import JWTBlacklistMiddleware
 from app.core.redis import redis_client
-from app.core.responses import APIError, error, success
+from app.core.responses import APIError, APIResponse, error, success  # Keep this one
 from app.db.session import engine
+from app.schemas.health import RootResponse
+
+# DELETE the second app.core.responses line if it's still there!
 
 setup_logging()
 
@@ -107,7 +110,7 @@ async def handle_unexpected_error(_: Request, exc: Exception):
     )
 
 
-@app.get("/")
+@app.get("/", response_model=APIResponse[RootResponse])
 def root():
     """Root liveness endpoint."""
     return success(
