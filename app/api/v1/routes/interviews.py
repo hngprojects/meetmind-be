@@ -73,3 +73,34 @@ async def get_interview(
         interview.model_dump(mode="json"),
         message="Interview session retrieved successfully",
     )
+
+
+@router.post("/{interview_id}/cancel", status_code=status.HTTP_200_OK)
+async def cancel_interview(
+    interview_id: uuid.UUID,
+    user: CurrentUser,
+    db: AsyncSession = Depends(get_session),
+):
+    """Cancel a scheduled or draft interview.
+
+    Only the assigned interviewer may cancel. Interviews that are already
+    cancelled or completed cannot be cancelled again (409 Conflict).
+
+    Args:
+        interview_id: UUID of the interview to cancel.
+        user: The authenticated user requesting cancellation.
+        db: Async database session.
+
+    Returns:
+        A standardized success envelope with the cancelled interview data.
+
+    Raises:
+        APIError: 404 if the interview does not exist.
+        APIError: 403 if the user is not the assigned interviewer.
+        APIError: 409 if the interview is already cancelled or completed.
+    """
+    result = await InterviewService.cancel_interview(interview_id, db, user)
+    return success(
+        result.model_dump(mode="json"),
+        message="Interview cancelled successfully",
+    )
